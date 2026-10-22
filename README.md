@@ -50,3 +50,7 @@ The desktop window uses the file tree, **Cmd/Ctrl+P** to jump to a file, and **C
 ## Diagrams
 
 The desktop app renders every diagram Mermaid supports. The terminal lays out flowcharts, sequence, class, state, ER, pie, gantt, journey, mindmap, timeline, git, xy, and quadrant diagrams. Other types keep their source and a note to open the desktop app.
+
+## License
+
+MIT
