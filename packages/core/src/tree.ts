@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
-import type { ReadResult, TreeNode, TreeResult } from './model.js'
+import { isMarkdown, isMermaidFile, type ReadResult, type TreeNode, type TreeResult } from './model.js'
 
 export type { ReadResult, TreeNode, TreeResult }
 
@@ -101,14 +101,11 @@ export function listTree(root: string): TreeResult {
       const abs = path.join(dir, entry.name)
       if (entry.isSymbolicLink()) continue
       if (entry.isDirectory()) {
+        const children = walk(abs, childRel, depth + 1)
+        if (!children.length) continue
         budget.left -= 1
-        nodes.push({
-          name: entry.name,
-          path: childRel,
-          kind: 'dir',
-          children: walk(abs, childRel, depth + 1),
-        })
-      } else if (entry.isFile()) {
+        nodes.push({ name: entry.name, path: childRel, kind: 'dir', children })
+      } else if (entry.isFile() && (isMarkdown(entry.name) || isMermaidFile(entry.name))) {
         budget.left -= 1
         nodes.push({ name: entry.name, path: childRel, kind: 'file' })
       }

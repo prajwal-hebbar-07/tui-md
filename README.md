@@ -38,7 +38,7 @@ The desktop app is on the [Releases](https://github.com/prajwal-hebbar-07/tui-md
 xattr -dr com.apple.quarantine /Applications/tui-md.app
 ```
 
-Then run `tui-md` in a folder of notes, or `tui-md path/to/file.md`.
+Then run `tui-md` in a folder of notes, or `tui-md path/to/file.md`. The explorer lists only markdown (`.md`, `.mdx`) and Mermaid (`.mmd`) files, and hides folders that contain none.
 
 ## Develop
 
