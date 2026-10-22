@@ -238,6 +238,7 @@ export function App() {
       }
       if (event.key === 't') setOutlineOpen((value) => !value)
       else if (event.key === 'H') {
+        event.preventDefault()
         setPalette('history')
         setPaletteQuery('')
         setPaletteIndex(0)
@@ -412,7 +413,7 @@ export function App() {
       setActive(next[index] ?? next[index - 1] ?? null)
     }
     setTabs(next)
-    if (selected && (selected.path === rel || selected.path.startsWith(`${rel}/`))) setSelected(null)
+    setSelected((current) => (current && (current.path === rel || current.path.startsWith(`${rel}/`)) ? null : current))
     refreshTree()
   }
 
