@@ -17,4 +17,4 @@ export {
   type TreeNode,
   type TreeResult,
 } from './model.js'
-export { contentType, gitChanges, listTree, readTextFile, safePath } from './tree.js'
+export { contentType, createEntry, gitChanges, listTree, readTextFile, removeEntry, renameEntry, safePath, type FsResult } from './tree.js'

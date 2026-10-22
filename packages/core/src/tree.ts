@@ -75,8 +75,9 @@ function sortNodes(nodes: TreeNode[]): TreeNode[] {
   })
 }
 
-export function listTree(root: string): TreeResult {
+export function listTree(root: string, options?: { keepEmpty?: boolean }): TreeResult {
   const rootReal = fs.realpathSync(root)
+  const keepEmpty = options?.keepEmpty ?? false
   const budget = { left: 4000, truncated: false }
 
   const walk = (dir: string, rel: string, depth: number): TreeNode[] => {
@@ -102,7 +103,7 @@ export function listTree(root: string): TreeResult {
       if (entry.isSymbolicLink()) continue
       if (entry.isDirectory()) {
         const children = walk(abs, childRel, depth + 1)
-        if (!children.length) continue
+        if (!children.length && !keepEmpty) continue
         budget.left -= 1
         nodes.push({ name: entry.name, path: childRel, kind: 'dir', children })
       } else if (entry.isFile() && (isMarkdown(entry.name) || isMermaidFile(entry.name))) {
@@ -118,6 +119,67 @@ export function listTree(root: string): TreeResult {
     nodes: walk(rootReal, '', 0),
     truncated: budget.truncated,
   }
+}
+
+export type FsResult = { ok: true } | { ok: false; error: string }
+
+function fsFail(error: string): FsResult {
+  return { ok: false, error }
+}
+
+function entryName(rel: string): string {
+  return rel.split('/').pop() || ''
+}
+
+export function createEntry(root: string, rel: string, kind: 'file' | 'dir'): FsResult {
+  const name = entryName(rel)
+  if (!rel || !name || name === '.' || name === '..') return fsFail('Enter a name.')
+  const abs = safePath(root, rel)
+  if (!abs) return fsFail('That path is outside the open folder.')
+  if (fs.existsSync(abs)) return fsFail('That name is already used.')
+  if (!fs.existsSync(path.dirname(abs))) return fsFail('The folder is missing.')
+  try {
+    if (kind === 'dir') fs.mkdirSync(abs)
+    else fs.writeFileSync(abs, '', 'utf8')
+  } catch (error) {
+    return fsFail(error instanceof Error ? error.message : 'Could not create that.')
+  }
+  return { ok: true }
+}
+
+export function renameEntry(root: string, from: string, to: string): FsResult {
+  const src = safePath(root, from)
+  const dest = safePath(root, to)
+  if (!src || !dest) return fsFail('That path is outside the open folder.')
+  if (src === dest) return { ok: true }
+  if (!fs.existsSync(src)) return fsFail('That item is missing.')
+  if (fs.existsSync(dest)) return fsFail('That name is already used.')
+  try {
+    fs.renameSync(src, dest)
+  } catch (error) {
+    return fsFail(error instanceof Error ? error.message : 'Could not rename that.')
+  }
+  return { ok: true }
+}
+
+export function removeEntry(root: string, rel: string): FsResult {
+  if (!rel) return fsFail('The open folder stays.')
+  const abs = safePath(root, rel)
+  if (!abs) return fsFail('That path is outside the open folder.')
+  let rootReal: string
+  try {
+    rootReal = fs.realpathSync(root)
+  } catch {
+    return fsFail('The open folder is missing.')
+  }
+  if (abs === rootReal) return fsFail('The open folder stays.')
+  if (!fs.existsSync(abs)) return fsFail('That item is missing.')
+  try {
+    fs.rmSync(abs, { recursive: true })
+  } catch (error) {
+    return fsFail(error instanceof Error ? error.message : 'Could not delete that.')
+  }
+  return { ok: true }
 }
 
 export function readTextFile(root: string, rel: string): ReadResult {

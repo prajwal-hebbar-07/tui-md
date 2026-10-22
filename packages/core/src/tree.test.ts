@@ -4,7 +4,7 @@ import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { firstMarkdown } from './model.js'
-import { listTree, readTextFile, safePath } from './tree.js'
+import { createEntry, listTree, readTextFile, removeEntry, renameEntry, safePath } from './tree.js'
 
 test('tree listing shows only markdown, hides ignored directories, and blocks path escape', () => {
   const scratch = path.join(path.dirname(fileURLToPath(import.meta.url)), '../.tmp')
@@ -33,6 +33,18 @@ test('tree listing shows only markdown, hides ignored directories, and blocks pa
     assert.equal(safePath(root, '/etc/passwd'), null)
     const doc = readTextFile(root, 'README.md')
     assert.equal(doc.ok && doc.text, '# Hello\n')
+    assert.equal(createEntry(root, 'empty', 'dir').ok, true)
+    assert.doesNotMatch(JSON.stringify(listTree(root).nodes), /empty/)
+    assert.match(JSON.stringify(listTree(root, { keepEmpty: true }).nodes), /empty/)
+    assert.equal(createEntry(root, 'empty/note.md', 'file').ok, true)
+    assert.equal(renameEntry(root, 'empty/note.md', 'empty/renamed.md').ok, true)
+    assert.equal(readTextFile(root, 'empty/renamed.md').ok, true)
+    assert.equal(removeEntry(root, 'empty').ok, true)
+    assert.equal(readTextFile(root, 'empty/renamed.md').ok, false)
+    assert.equal(createEntry(root, '../escape.md', 'file').ok, false)
+    assert.equal(renameEntry(root, 'README.md', '../escape.md').ok, false)
+    assert.equal(removeEntry(root, '../secret').ok, false)
+    assert.equal(removeEntry(root, '').ok, false)
   } finally {
     fs.rmSync(root, { recursive: true, force: true })
   }
