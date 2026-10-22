@@ -130,28 +130,27 @@ git push origin main v0.1.1
 
 ## Keys in the terminal
 
-Reading a file is the whole screen. The outline sits in the sidebar until you hide it. Files are a picker, not a second mode you live in.
+Reading a file is the whole screen. There is no sidebar. `tui-md` with no path opens a fuzzy picker of the markdown files. `tui-md notes.md` opens that file.
 
 | Key | Action |
 | --- | --- |
-| j k or ↑↓ | Scroll |
-| d u | Page down and up |
-| g G | Top and bottom |
-| t | Show or hide the outline |
-| J K | Next and previous heading |
-| 1-9 | Jump to a heading |
-| ctrl+p | File picker |
-| P | Folder browser |
+| j k or ↑↓ | Scroll one line. A count repeats it: `5j` |
+| h l or ←→ | Pan one column. `0` and `$` jump to the start and end |
+| ctrl-d ctrl-u | Half page down and up |
+| ctrl-f ctrl-b or d u | Full page down and up |
+| gg G | Top and bottom. `12G` or `:12` goes to that line |
+| { } | Previous and next paragraph |
+| J K | Previous and next heading |
+| / | Find in the open file. `n` and `N` move through matches |
+| ctrl-p | Fuzzy file picker. Type to filter, enter opens, arrows or ctrl-j ctrl-k move |
 | H | Recent files |
-| / or ctrl+f | Find in the open file |
-| n N | Next and previous match |
 | w | Watch the file and reload on save |
 | r | Reload now |
-| ctrl+e | Open the file in `$EDITOR` |
+| ctrl-e | Open the file in `$EDITOR` |
 | s | Toggle preview and source |
-| q | Quit |
+| q or :q | Quit |
 
-`tui-md` opens the file picker. `tui-md --picker` opens the folder browser. `tui-md --history` and `tui-md --last` use the recent-file list in `~/.config/tui-md/history`. `tui-md --watch file.md` reloads when that file is saved. `tui-md --inline` prints one file and exits, which is the same idea as `--dump`. A pipe works too: `cat notes.md | tui-md`.
+`tui-md --history` and `tui-md --last` use the recent-file list in `~/.config/tui-md/history`. `tui-md --watch file.md` reloads when that file is saved. `tui-md --inline` prints one file and exits, which is the same idea as `--dump`. A pipe works too: `cat notes.md | tui-md`.
 
 The desktop window opens on the document, with the outline in the sidebar. **Files** or **Cmd/Ctrl+P** jumps to a file, **Recent** or **H** opens files you have already read, and **Cmd/Ctrl+O** opens a folder. The open file reloads when it changes on disk. Preview is read-only.
 
