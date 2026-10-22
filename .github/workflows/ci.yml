@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test (${{ matrix.os }}, Node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, node: 22 }
+          - { os: ubuntu-latest, node: 24 }
+          - { os: macos-latest, node: 24 }
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+      - run: pnpm typecheck
+      - run: pnpm build
+      - name: Install the packed CLI and run it
+        run: |
+          (cd apps/cli && pnpm pack --pack-destination "$RUNNER_TEMP")
+          npm install --global --prefix "$RUNNER_TEMP/prefix" "$RUNNER_TEMP"/tui-md-viewer-*.tgz
+          "$RUNNER_TEMP/prefix/bin/tui-md" --version
+          "$RUNNER_TEMP/prefix/bin/tui-md" --dump examples/README.md | grep -q "Scout the existing code"
+
+  desktop:
+    name: Package the desktop app
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @tui-md/core build && pnpm --filter ./apps/desktop build
+      - run: pnpm --filter ./apps/desktop exec electron-builder --linux --dir --publish never
