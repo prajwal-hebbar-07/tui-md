@@ -441,33 +441,10 @@ export function App() {
       <header className="titlebar">
         <span className="title">{active ? `${fileName} — ${rootName}` : rootName}</span>
         <div className="title-actions">
-          <button
-            type="button"
-            onClick={() => {
-              setPalette('history')
-              setPaletteQuery('')
-              setPaletteIndex(0)
-            }}
-          >
-            Recent
-          </button>
-          <button type="button" className={outlineOpen ? 'on' : ''} onClick={() => setOutlineOpen((value) => !value)}>
-            Outline
-          </button>
           {desktop ? (
             <button type="button" onClick={() => void chooseFolder()}>
               Open Folder
             </button>
-          ) : null}
-          {kind === 'markdown' ? (
-            <div className="mode">
-              <button type="button" className={mode === 'preview' ? 'on' : ''} onClick={() => setMode('preview')}>
-                Preview
-              </button>
-              <button type="button" className={mode === 'source' ? 'on' : ''} onClick={() => setMode('source')}>
-                Source
-              </button>
-            </div>
           ) : null}
         </div>
       </header>

@@ -39,14 +39,13 @@ button { background: none; border: 0; padding: 0; }
   align-items: center;
   -webkit-app-region: no-drag;
 }
-.title-actions > button, .mode button, .palette-card input, .search-pane input {
+.title-actions > button, .palette-card input, .search-pane input {
   border: 1px solid #3c3c3c;
   background: #2a2a2a;
   border-radius: 4px;
   padding: 3px 8px;
 }
-.mode { display: flex; }
-.mode button.on, .title-actions > button.on, .title-actions > button:hover, .mode button:hover { background: #37373d; }
+.title-actions > button:hover { background: #37373d; }
 .body { flex: 1; min-height: 0; display: flex; }
 .activity {
   width: 48px;
