@@ -1,5 +1,5 @@
 export { renderMarkdownHtml, mermaidDocument } from './html.js'
-export { markdownOutline, renderDocument, renderSource, type Heading } from './markdown.js'
+export { layoutDocument, markdownOutline, renderDocument, renderSource, type Heading, type PlacedHeading } from './markdown.js'
 export { renderMermaid } from './mermaid.js'
 export { linesToAnsi, linesToPlain, sliceSpans, spanWidth, type Span } from './text.js'
 export {

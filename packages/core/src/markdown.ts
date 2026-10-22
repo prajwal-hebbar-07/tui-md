@@ -105,10 +105,17 @@ function stripFrontMatter(src: string): string {
   return match ? src.slice(match[0].length) : src
 }
 
+export type PlacedHeading = { id: string; depth: number; text: string; line: number }
+
 export function renderDocument(src: string, width: number): Span[][] {
+  return layoutDocument(src, width).lines
+}
+
+export function layoutDocument(src: string, width: number): { lines: Span[][]; headings: PlacedHeading[] } {
   const tokens = md.parse(stripFrontMatter(src), {})
   const limit = Math.max(20, width)
   const lines: Span[][] = []
+  const headings: PlacedHeading[] = []
   const blank = () => {
     if (lines.length && lines[lines.length - 1].some((span) => span.text.trim())) lines.push([{ text: '' }])
   }
@@ -121,6 +128,7 @@ export function renderDocument(src: string, width: number): Span[][] {
       const depth = Number(token.tag.slice(1)) || 1
       blank()
       const content = paragraph(inline, limit)
+      headings.push({ id: `h-${headings.length}`, depth, text: inline?.content || '', line: lines.length })
       lines.push(
         ...content.map((line) => line.map((span) => ({ ...span, bold: true, color: HEAD }))),
       )
@@ -224,9 +232,14 @@ export function renderDocument(src: string, width: number): Span[][] {
       }
     }
   }
-  while (lines.length && !lines[0].some((span) => span.text.trim())) lines.shift()
+  let dropped = 0
+  while (lines.length && !lines[0].some((span) => span.text.trim())) {
+    lines.shift()
+    dropped += 1
+  }
+  if (dropped) for (const heading of headings) heading.line -= dropped
   while (lines.length && !lines[lines.length - 1].some((span) => span.text.trim())) lines.pop()
-  return lines.length ? lines : [[{ text: '' }]]
+  return { lines: lines.length ? lines : [[{ text: '' }]], headings }
 }
 
 export function renderSource(src: string, width: number): Span[][] {

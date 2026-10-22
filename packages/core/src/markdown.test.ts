@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { renderMarkdownHtml } from './html.js'
-import { markdownOutline, renderDocument } from './markdown.js'
+import { layoutDocument, markdownOutline, renderDocument } from './markdown.js'
 import { linesToPlain } from './text.js'
 
 const source = `---
@@ -44,6 +44,10 @@ test('markdown preview keeps structure and renders mermaid', () => {
   assert.match(text, /Start/)
   assert.match(text, /Ready/)
   assert.doesNotMatch(text, /title: demo/)
+  const laid = layoutDocument(source, 72)
+  const heading = laid.headings[0]
+  assert.equal(heading?.text, 'Viewer')
+  assert.match(laid.lines[heading.line].map((span) => span.text).join(''), /Viewer/)
 })
 
 test('html preview marks headings and mermaid blocks', () => {
