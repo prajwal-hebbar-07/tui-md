@@ -221,6 +221,16 @@ export function App() {
         return
       }
       if (typing) return
+      if (selected?.path && event.key === 'F2') {
+        event.preventDefault()
+        startDraft({ mode: 'rename', path: selected.path, kind: selected.kind }, selected.path.split('/').pop() || '')
+        return
+      }
+      if (selected?.path && (event.key === 'Delete' || (platform === 'darwin' && event.metaKey && event.key === 'Backspace'))) {
+        event.preventDefault()
+        void destroy(selected.path, selected.kind)
+        return
+      }
       if (event.key === 'Escape') {
         setPalette(null)
         setFindOpen(false)
@@ -268,7 +278,7 @@ export function App() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [currentHeading, desktop, findText, kind, outline])
+  }, [active, currentHeading, desktop, findText, kind, outline, platform, selected, tabs])
 
   function trackHeading() {
     const root = viewport.current
