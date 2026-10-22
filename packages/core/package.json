@@ -13,7 +13,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput",
-    "test": "node --import tsx --test src/mermaid.test.ts src/markdown.test.ts src/tree.test.ts"
+    "test": "node --import tsx --test src/mermaid.test.ts src/markdown.test.ts src/tree.test.ts src/history.test.ts"
   },
   "dependencies": {
     "markdown-it": "^14.1.0"

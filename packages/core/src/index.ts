@@ -1,5 +1,6 @@
 export { renderMarkdownHtml, mermaidDocument } from './html.js'
 export { layoutDocument, markdownOutline, renderDocument, renderSource, type Heading, type PlacedHeading } from './markdown.js'
+export { fuzzyPaths, historyFile, readHistory, rememberFile } from './history.js'
 export { renderMermaid } from './mermaid.js'
 export { linesToAnsi, linesToPlain, sliceSpans, spanWidth, type Span } from './text.js'
 export {
