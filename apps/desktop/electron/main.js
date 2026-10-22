@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { app, BrowserWindow, dialog, ipcMain, protocol, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, protocol, shell } from 'electron'
 import { bubbleGit, contentType, createEntry, gitChanges, listTree, readTextFile, removeEntry, renameEntry, safePath } from '@tui-md/core'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -49,6 +49,17 @@ function attach(win) {
     event.preventDefault()
     shell.openExternal(url)
   })
+  win.webContents.on('context-menu', (_event, params) => {
+    if (!params.selectionText) return
+    Menu.buildFromTemplate([{ role: 'copy' }, { role: 'selectAll' }]).popup()
+  })
+}
+
+function installMenu() {
+  const mac = process.platform === 'darwin'
+  Menu.setApplicationMenu(
+    Menu.buildFromTemplate([...(mac ? [{ role: 'appMenu' }] : []), { role: 'editMenu' }]),
+  )
 }
 
 function rootInfo() {
@@ -84,6 +95,7 @@ app.whenReady().then(() => {
     return new Response(body, { headers: { 'content-type': contentType(abs) } })
   })
 
+  installMenu()
   ipcMain.handle('root', () => rootInfo())
   ipcMain.handle('tree', () => (root ? listTree(root, treeOptions) : { name: '', nodes: [], truncated: false }))
   ipcMain.handle('git', () => {
