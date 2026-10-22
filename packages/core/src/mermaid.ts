@@ -1,3 +1,4 @@
+import { renderFlowchart } from './flowchart.js'
 import { centerText, wrapText } from './text.js'
 
 type Shape = 'rect' | 'round' | 'stadium' | 'diamond' | 'sub' | 'cylinder' | 'circle' | 'hex' | 'odd'
@@ -966,11 +967,8 @@ export function renderMermaid(src: string, width: number): string[] {
   try {
     switch (kind) {
       case 'flowchart':
-      case 'graph': {
-        const parsed = parseFlow(body)
-        if (!parsed) return fallback(kind, body, limit)
-        return layoutGraph(parsed.dir, parsed.nodes, parsed.edges, limit)
-      }
+      case 'graph':
+        return renderFlowchart(body, limit) ?? fallback(kind, body, limit)
       case 'sequencediagram':
         return renderSequence(body, limit)
       case 'classdiagram':

@@ -11,29 +11,67 @@ flowchart TD
     D -->|Yes| E[Open a reviewed PR]
 `
 
-test('flowchart keeps the decision and the return edge', () => {
+const architecture = `
+flowchart LR
+    subgraph Browser
+        SPA["React SPA<br/>SsoLoginProvider · AuthCallbackPage"]
+    end
+    subgraph Backend["Lyik backend"]
+        EP["/v1/auth/login-url<br/>/v1/auth/callback"]
+        Plugin["Okta SSO plugin<br/>client ID · client secret"]
+    end
+    Okta["Okta (Auth0)<br/>hosted login"]
+    SPA -- "public client" --> EP
+    EP --> Plugin
+    Plugin <-- "OIDC code exchange" --> Okta
+    SPA -. "redirect to login_url" .-> Okta
+    Okta -. "redirect to /auth/callback" .-> SPA
+`
+
+test('flowchart keeps the decision and routes the return edge', () => {
   const diagram = renderMermaid(flow, 100).join('\n')
   if (process.env.SHOW) console.log(diagram)
-  assert.match(diagram, /Scout the existing code/)
-  assert.match(diagram, /Short interview/)
-  assert.match(diagram, /Solution sketch/)
-  assert.match(diagram, /Fits the current architecture/)
-  assert.match(diagram, /Open a reviewed PR/)
+  for (const text of ['Scout the existing code', 'Short interview', 'Solution sketch', 'Fits the current architecture', 'Open a reviewed PR']) {
+    assert.match(diagram, new RegExp(text))
+  }
   assert.match(diagram, /No/)
   assert.match(diagram, /Yes/)
   assert.match(diagram, /▼/)
-  assert.match(diagram, /◄/)
-  const decision = diagram.indexOf('Fits the current architecture')
-  const back = diagram.indexOf('No')
-  assert.ok(decision !== -1 && back !== -1)
+  assert.match(diagram, /▲/)
+  assert.doesNotMatch(diagram, /↺/)
 })
 
 test('labeled arrow syntax and left-to-right graphs render', () => {
   const diagram = renderMermaid('flowchart LR\nA[Read] -- open --> B[Preview]\nB --> C[Done]', 80).join('\n')
   assert.match(diagram, /Read/)
   assert.match(diagram, /Preview/)
-  assert.match(diagram, /open/)
+  assert.match(diagram, /─ open ─/)
   assert.match(diagram, /►/)
+})
+
+test('quoted labels, subgraphs, and dotted or two-way edges render', () => {
+  const lines = renderMermaid(architecture, 120)
+  const diagram = lines.join('\n')
+  if (process.env.SHOW) console.log(diagram)
+  assert.doesNotMatch(diagram, /"/)
+  assert.match(diagram, /┌─ Browser ─/)
+  assert.match(diagram, /┌─ Lyik backend ─/)
+  for (const label of ['public client', 'OIDC code exchange', 'redirect to login_url', 'redirect to /auth/callback']) {
+    assert.match(diagram, new RegExp(` ${label.replace(/\//g, '\\/')} `))
+  }
+  assert.match(diagram, /┄/)
+  assert.doesNotMatch(diagram, /↺/)
+  const spa = lines.find((line) => line.includes('React SPA'))!
+  assert.ok(!/redirect/.test(spa.slice(0, spa.indexOf('React SPA'))), 'labels stay off the boxes')
+})
+
+test('flowchart edge operators and grouped nodes', () => {
+  const diagram = renderMermaid('graph TD\nA & B --> C\nC ==> D\nD --o E\nE --x F\nF -.- G\nG ~~~ H', 100).join('\n')
+  for (const id of ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']) assert.match(diagram, new RegExp(`│ ${id} │`))
+  assert.match(diagram, /┃/)
+  assert.match(diagram, /●/)
+  assert.match(diagram, /×/)
+  assert.match(diagram, /┆/)
 })
 
 test('sequence, pie, and class diagrams stay readable', () => {
