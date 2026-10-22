@@ -7,3 +7,6 @@ coverage/
 packages/core/.tmp/
 apps/desktop/dist/
 apps/cli/dist/
+apps/cli/README.md
+apps/cli/LICENSE
+*.tgz
