@@ -28,6 +28,10 @@ const MUTED = '#858585'
 const SELECT = '#094771'
 const DIM_SELECT = '#37373d'
 const STATUS = '#007acc'
+const MATCH = '#613214'
+const CURRENT_MATCH = '#9e6a03'
+
+type Hit = { line: number; col: number }
 
 function badgeColor(badge: string): string {
   if (badge === 'D') return '#f14c4c'
@@ -56,6 +60,9 @@ export function App({ root, initialFile }: { root: string; initialFile?: string 
   const [focus, setFocus] = useState<'tree' | 'preview'>('tree')
   const [activity, setActivity] = useState<'files' | 'search'>('files')
   const [query, setQuery] = useState('')
+  const [find, setFind] = useState('')
+  const [findInput, setFindInput] = useState(false)
+  const [hit, setHit] = useState(0)
   const [source, setSource] = useState(false)
   const [help, setHelp] = useState(false)
   const [scroll, setScroll] = useState(0)
@@ -123,7 +130,43 @@ export function App({ root, initialFile }: { root: string; initialFile?: string 
   const maxScroll = Math.max(0, lines.length - previewH)
   const viewW = editorW
   const wide = lines.some((line) => spanWidth(line) > viewW)
-  const slice = lines.slice(scroll, scroll + previewH).map((line) => sliceSpans(line, pan, viewW))
+
+  const hits = useMemo(() => {
+    if (!find) return []
+    const caseSensitive = find !== find.toLowerCase()
+    const needle = caseSensitive ? find : find.toLowerCase()
+    const out: Hit[] = []
+    lines.forEach((line, index) => {
+      const raw = line.map((span) => span.text).join('')
+      const text = caseSensitive ? raw : raw.toLowerCase()
+      for (let at = text.indexOf(needle); at >= 0; at = text.indexOf(needle, at + needle.length)) {
+        out.push({ line: index, col: at })
+      }
+    })
+    return out
+  }, [find, lines])
+  const currentHit = hits.length ? Math.min(hit, hits.length - 1) : -1
+
+  const reveal = (index: number) => {
+    const target = hits[index]
+    if (!target) return
+    setHit(index)
+    setScroll(Math.min(maxScroll, Math.max(0, target.line - Math.floor(previewH / 3))))
+    if (target.col < pan || target.col + find.length > pan + viewW) setPan(Math.max(0, target.col - 4))
+  }
+
+  useEffect(() => {
+    if (!hits.length) return
+    const next = hits.findIndex((target) => target.line >= scroll)
+    reveal(next < 0 ? 0 : next)
+  }, [hits])
+
+  const slice = lines.slice(scroll, scroll + previewH).map((line, offset) => {
+    const marks = hits.flatMap((target, index) =>
+      target.line === scroll + offset ? [{ col: target.col, current: index === currentHit }] : [],
+    )
+    return sliceSpans(highlight(line, marks, find.length), pan, viewW)
+  })
   const fileName = selected ? selected.split('/').pop() || selected : 'Welcome'
   const crumb = selected ? selected.split('/').join('  ›  ') : tree.name
 
@@ -148,9 +191,23 @@ export function App({ root, initialFile }: { root: string; initialFile?: string 
       if (input === '?' || key.escape || input === 'q') setHelp(false)
       return
     }
+    if (findInput) {
+      if (key.escape) {
+        setFind('')
+        setFindInput(false)
+      } else if (key.return) {
+        setFindInput(false)
+        setFocus('preview')
+      } else if (key.backspace || key.delete) setFind((value) => value.slice(0, -1))
+      else if (key.downArrow && hits.length) reveal((currentHit + 1) % hits.length)
+      else if (key.upArrow && hits.length) reveal((currentHit - 1 + hits.length) % hits.length)
+      else if (input && !key.ctrl && !key.meta) setFind((value) => value + input)
+      return
+    }
     if (key.escape) {
       setActivity('files')
       setQuery('')
+      setFind('')
       setHelp(false)
       setFocus('tree')
       return
@@ -173,7 +230,16 @@ export function App({ root, initialFile }: { root: string; initialFile?: string 
       setHelp(true)
       return
     }
-    if (input === '/' || input === '2') {
+    if (input === '/' || (key.ctrl && input === 'f')) {
+      setFind('')
+      setFindInput(true)
+      return
+    }
+    if (hits.length && (input === 'n' || input === 'N')) {
+      reveal(input === 'n' ? (currentHit + 1) % hits.length : (currentHit - 1 + hits.length) % hits.length)
+      return
+    }
+    if (input === '2' || (key.ctrl && input === 'p')) {
       setActivity('search')
       setFocus('tree')
       return
@@ -233,7 +299,12 @@ export function App({ root, initialFile }: { root: string; initialFile?: string 
 
   const mode = !markdown && !mermaidFile ? 'TEXT' : source ? 'SOURCE' : 'PREVIEW'
   const percent = lines.length <= previewH ? 100 : Math.round((scroll / maxScroll) * 100)
-  const status = ` ${tree.name}   ${mode}   ${selected || 'no file'}   ${percent}%${wide ? '   ↔ pan' : ''}   tab panes   / filter   s source   q quit `
+  const count = hits.length ? `${currentHit + 1}/${hits.length}` : find ? 'no match' : ''
+  const status = findInput
+    ? ` Find: ${find}▏   ${count}   ↑↓ match   enter keep   esc cancel `
+    : ` ${tree.name}   ${mode}   ${selected || 'no file'}   ${percent}%${wide ? '   ↔ pan' : ''}${
+        find ? `   "${find}" ${count}   n N match` : ''
+      }   / find   ^p files   s source   q quit `
   const selectionBg = focus === 'tree' ? SELECT : DIM_SELECT
 
   const treeRoom = Math.max(0, treeH - (tree.truncated ? 1 : 0))
@@ -247,7 +318,9 @@ export function App({ root, initialFile }: { root: string; initialFile?: string 
     ' tab       tree / preview',
     ' enter     open the preview',
     ' s         preview / source',
-    ' /         filter files',
+    ' / ctrl+f  find in the file',
+    ' n N       next / previous match',
+    ' ctrl+p    filter files',
     ' g G       top / bottom',
     ' q         quit',
   ]
@@ -363,6 +436,28 @@ function Spans({ spans, width }: { spans: Span[]; width: number }) {
       ))}
     </Text>
   )
+}
+
+function highlight(spans: Span[], marks: { col: number; current: boolean }[], length: number): Span[] {
+  if (!marks.length || !length) return spans
+  const out: Span[] = []
+  let start = 0
+  for (const span of spans) {
+    const end = start + span.text.length
+    const cuts = new Set([0, span.text.length])
+    for (const mark of marks) {
+      for (const at of [mark.col, mark.col + length]) if (at > start && at < end) cuts.add(at - start)
+    }
+    const points = [...cuts].sort((a, b) => a - b)
+    for (let i = 0; i < points.length - 1; i++) {
+      const at = start + points[i]
+      const mark = marks.find((candidate) => at >= candidate.col && at < candidate.col + length)
+      const text = span.text.slice(points[i], points[i + 1])
+      out.push(mark ? { ...span, text, color: '#ffffff', bg: mark.current ? CURRENT_MATCH : MATCH } : { ...span, text })
+    }
+    start = end
+  }
+  return out
 }
 
 function Fill({ count, width, bg }: { count: number; width: number; bg: string }) {

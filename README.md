@@ -136,7 +136,9 @@ git push origin main v0.1.1
 | ← → or h l | Collapse, expand, or pan a wide diagram |
 | tab | Switch between the tree and the preview |
 | s | Toggle preview and source |
-| / | Filter files |
+| / or ctrl+f | Find in the open file |
+| n N | Next and previous match |
+| ctrl+p | Filter files |
 | q | Quit |
 
 The desktop window uses the file tree, **Cmd/Ctrl+P** to jump to a file, and **Cmd/Ctrl+O** to open a folder. Preview is read-only.
