@@ -2,12 +2,8 @@ import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import {
-  ancestorDirs,
-  bubbleGit,
-  defaultExpanded,
   flattenFiles,
   fuzzyPaths,
-  gitChanges,
   isMarkdown,
   isMermaidFile,
   layoutDocument,
@@ -19,10 +15,8 @@ import {
   renderSource,
   sliceSpans,
   spanWidth,
-  visibleTree,
   type PlacedHeading,
   type Span,
-  type TreeNode,
 } from '@tui-md/core'
 import { Box, Text, useApp, useInput, useStdout } from 'ink'
 import { useEffect, useMemo, useState } from 'react'
@@ -37,18 +31,7 @@ const MATCH = '#613214'
 const CURRENT_MATCH = '#9e6a03'
 
 type Hit = { line: number; col: number }
-type Screen = 'read' | 'fuzzy' | 'browser' | 'history'
-
-function badgeColor(badge: string): string {
-  if (badge === 'D') return '#f14c4c'
-  if (badge === 'M') return '#e2c08d'
-  return '#73c991'
-}
-
-function rowLabel(node: TreeNode, depth: number, open: boolean): string {
-  const chevron = node.kind === 'dir' ? (open ? '▾' : '▸') : ' '
-  return `${'  '.repeat(depth)}${chevron} ${node.name}`
-}
+type Screen = 'read' | 'fuzzy' | 'history'
 
 function openInEditor(command: string | undefined, file: string, line: number) {
   const cmd = command || process.env.VISUAL || process.env.EDITOR || 'nano'
@@ -85,14 +68,9 @@ export function App({
   const [reload, setReload] = useState(0)
   const [treeTick, setTreeTick] = useState(0)
   const tree = useMemo(() => listTree(root), [root, treeTick])
-  const git = useMemo(() => bubbleGit(tree.nodes, gitChanges(root)), [root, tree.nodes])
   const files = useMemo(() => flattenFiles(tree.nodes).map((file) => file.path), [tree.nodes])
-  const [expanded, setExpanded] = useState(() => new Set(defaultExpanded(listTree(initialRoot).nodes)))
-  const [rootOpen, setRootOpen] = useState(true)
   const [opened, setOpened] = useState(initialFile || '')
-  const [cursor, setCursor] = useState(initialFile || '')
   const [screen, setScreen] = useState<Screen>(initialScreen)
-  const [toc, setToc] = useState(true)
   const [watch, setWatch] = useState(watchStart)
   const [query, setQuery] = useState(fuzzyQuery)
   const [pickIndex, setPickIndex] = useState(0)
@@ -104,7 +82,6 @@ export function App({
   const [help, setHelp] = useState(false)
   const [scroll, setScroll] = useState(0)
   const [pan, setPan] = useState(0)
-  const [treeScroll, setTreeScroll] = useState(0)
   const [piped, setPiped] = useState<string | null>(stdinText ?? null)
 
   useEffect(() => {
@@ -114,10 +91,6 @@ export function App({
       stdout.off('resize', onResize)
     }
   }, [stdout])
-
-  useEffect(() => {
-    setExpanded(new Set(defaultExpanded(tree.nodes)))
-  }, [root])
 
   useEffect(() => {
     if (!opened || piped != null) return
@@ -148,37 +121,20 @@ export function App({
 
   const cols = size.cols
   const rows = size.rows
-  const reading = screen === 'read'
-  const browsing = screen === 'browser'
   const picking = screen === 'fuzzy' || screen === 'history'
-  const sidebarW = browsing || (reading && toc && !help) ? Math.max(22, Math.min(36, Math.floor(cols * 0.28))) : 0
-  const editorW = Math.max(20, cols - sidebarW - (sidebarW ? 1 : 0))
+  const editorW = Math.max(20, cols)
   const bodyH = Math.max(6, rows - 1)
   const previewH = Math.max(3, bodyH - 2)
 
-  const visible = useMemo(() => (rootOpen ? visibleTree(tree.nodes, expanded) : []), [rootOpen, tree.nodes, expanded])
-  const treeRows = visible
-  const found = treeRows.findIndex((row) => row.node.path === cursor)
-  const selectedIndex = found < 0 ? 0 : found
-  const treeHeader = 2
-  const treeH = Math.max(1, bodyH - treeHeader)
-
-  useEffect(() => {
-    if (!browsing) return
-    if (selectedIndex < treeScroll) setTreeScroll(selectedIndex)
-    else if (selectedIndex >= treeScroll + treeH) setTreeScroll(selectedIndex - treeH + 1)
-  }, [browsing, selectedIndex, treeH, treeScroll])
-
-  const previewPath = browsing ? (treeRows[selectedIndex]?.node.kind === 'file' ? treeRows[selectedIndex].node.path : '') : opened
   const usingPipe = piped != null && !opened
   const doc = useMemo(() => {
     if (usingPipe) return { ok: true as const, text: piped || '', truncated: false, binary: false, eol: 'LF' as const }
-    if (!previewPath) return null
-    return readTextFile(root, previewPath)
-  }, [usingPipe, piped, previewPath, root, reload])
+    if (!opened) return null
+    return readTextFile(root, opened)
+  }, [usingPipe, piped, opened, root, reload])
 
-  const markdown = Boolean((usingPipe || previewPath) && (usingPipe || isMarkdown(previewPath)))
-  const mermaidFile = Boolean(previewPath && isMermaidFile(previewPath))
+  const markdown = Boolean((usingPipe || opened) && (usingPipe || isMarkdown(opened)))
+  const mermaidFile = Boolean(opened && isMermaidFile(opened))
   const laid = useMemo(() => {
     if (!doc || !doc.ok || doc.binary) return { lines: [] as Span[][], headings: [] as PlacedHeading[] }
     if (mermaidFile) return { lines: renderMermaid(doc.text, editorW - 2).map((line) => [{ text: line, color: '#d4d4d4' }]), headings: [] }
@@ -188,12 +144,12 @@ export function App({
 
   const notice = doc && doc.ok && doc.truncated ? 2 : 0
   const lines = useMemo(() => {
-    if (!doc) return [[{ text: browsing ? 'Open a markdown file' : 'No file open', color: MUTED, dim: true }]]
+    if (!doc) return [[{ text: 'No file open', color: MUTED, dim: true }]]
     if (!doc.ok) return [[{ text: doc.error, color: MUTED, dim: true }]]
     if (doc.binary) return [[{ text: 'Binary file', color: MUTED, dim: true }]]
     const banner = notice ? [[{ text: 'Showing the first 400 KB', color: MUTED, dim: true }], [{ text: '' }]] : []
     return [...banner, ...laid.lines]
-  }, [browsing, doc, laid.lines, notice])
+  }, [doc, laid.lines, notice])
   const headings = useMemo(
     () => laid.headings.map((heading) => ({ ...heading, line: heading.line + notice })),
     [laid.headings, notice],
@@ -254,29 +210,12 @@ export function App({
     )
     return sliceSpans(highlight(line, marks, find.length), pan, viewW)
   })
-  const fileName = usingPipe ? 'stdin' : previewPath ? previewPath.split('/').pop() || previewPath : 'Welcome'
-  const crumb = usingPipe ? 'stdin' : previewPath ? previewPath.split('/').join('  ›  ') : tree.name
-
-  const moveTree = (delta: number) => {
-    if (!treeRows.length) return
-    const next = Math.min(treeRows.length - 1, Math.max(0, selectedIndex + delta))
-    setCursor(treeRows[next].node.path)
-  }
-
-  const toggleDir = (node: TreeNode) => {
-    if (node.kind !== 'dir') return
-    setExpanded((current) => {
-      const next = new Set(current)
-      if (next.has(node.path)) next.delete(node.path)
-      else next.add(node.path)
-      return next
-    })
-  }
+  const fileName = usingPipe ? 'stdin' : opened ? opened.split('/').pop() || opened : 'Welcome'
+  const crumb = usingPipe ? 'stdin' : opened ? opened.split('/').join('  ›  ') : tree.name
 
   const openRel = (rel: string) => {
     setPiped(null)
     setOpened(rel)
-    setCursor(rel)
     setScreen('read')
     setQuery('')
     setPickIndex(0)
@@ -292,18 +231,6 @@ export function App({
     }
     setRoot(path.dirname(abs))
     openRel(path.basename(abs))
-  }
-
-  const showBrowser = () => {
-    setCursor(opened)
-    setExpanded((current) => {
-      const next = new Set(current.size ? current : defaultExpanded(tree.nodes))
-      if (opened) for (const dir of ancestorDirs(opened)) next.add(dir)
-      return next
-    })
-    setHelp(false)
-    setFindInput(false)
-    setScreen('browser')
   }
 
   const showFuzzy = () => {
@@ -369,7 +296,6 @@ export function App({
     if (key.escape) {
       setFind('')
       setHelp(false)
-      if (browsing && (opened || piped != null)) setScreen('read')
       return
     }
     if (input === 'q') {
@@ -388,39 +314,6 @@ export function App({
       showHistory()
       return
     }
-    if (input === 'P') {
-      showBrowser()
-      return
-    }
-    if (browsing) {
-      if (key.upArrow || input === 'k') moveTree(-1)
-      else if (key.downArrow || input === 'j') moveTree(1)
-      else if (input === 'g') moveTree(-treeRows.length)
-      else if (input === 'G') moveTree(treeRows.length)
-      else if (key.pageUp || input === 'u') moveTree(-treeH)
-      else if (key.pageDown || input === 'd') moveTree(treeH)
-      else if (key.leftArrow || input === 'h') {
-        const row = treeRows[selectedIndex]
-        if (!row) return
-        if (row.node.kind === 'dir' && expanded.has(row.node.path)) toggleDir(row.node)
-        else if (row.depth > 0) {
-          const parent = row.node.path.split('/').slice(0, -1).join('/')
-          if (parent) setCursor(parent)
-          else setRootOpen(false)
-        } else setRootOpen(false)
-      } else if (key.rightArrow || input === 'l' || key.return) {
-        const row = treeRows[selectedIndex]
-        if (!row) {
-          setRootOpen(true)
-          return
-        }
-        if (row.node.kind === 'dir') {
-          if (!expanded.has(row.node.path)) toggleDir(row.node)
-          else if (key.rightArrow || input === 'l') moveTree(1)
-        } else if (key.return) openRel(row.node.path)
-      }
-      return
-    }
     if (input === '/' || (key.ctrl && input === 'f')) {
       setFind('')
       setFindInput(true)
@@ -428,10 +321,6 @@ export function App({
     }
     if (hits.length && (input === 'n' || input === 'N')) {
       reveal(input === 'n' ? (currentHit + 1) % hits.length : (currentHit - 1 + hits.length) % hits.length)
-      return
-    }
-    if (input === 't') {
-      setToc((value) => !value)
       return
     }
     if (input === 's' && markdown) {
@@ -475,29 +364,20 @@ export function App({
     ? ` Find: ${find}▏   ${count}   ↑↓ match   enter keep   esc cancel `
     : picking
       ? ` ${screen === 'history' ? 'Recent' : 'Files'}   ${pickRows.length ? `${shownPick + 1}/${pickRows.length}` : 'no matches'}   type to filter   enter open   esc back `
-      : browsing
-        ? ` ${tree.name}   browse   enter open   esc back   ^p files   H recent   q quit `
-        : ` ${tree.name}   ${mode}${watch ? '  watch' : ''}   ${usingPipe ? 'stdin' : opened || 'no file'}   ${percent}%${
+      : ` ${tree.name}   ${mode}${watch ? '  watch' : ''}   ${usingPipe ? 'stdin' : opened || 'no file'}   ${percent}%${
             wide ? '   ↔ pan' : ''
-          }${find ? `   "${find}" ${count}   n N` : ''}   t outline   ^p files   P browse   H recent   / find   q quit `
+          }${find ? `   "${find}" ${count}   n N` : ''}   ^p files   H recent   / find   q quit `
 
-  const tocRoom = Math.max(0, bodyH - 1)
-  const tocStart = Math.min(Math.max(0, headings.length - tocRoom), Math.max(0, activeHeading - Math.floor(tocRoom / 2)))
-  const tocSlice = headings.slice(tocStart, tocStart + tocRoom)
-  const treeRoom = Math.max(0, treeH - (tree.truncated ? 1 : 0))
-  const treeSlice = treeRows.slice(treeScroll, treeScroll + treeRoom)
   const helpLines = [
     ' tui-md',
     '',
     ' j k       scroll',
     ' d u       page',
     ' g G       top / bottom',
-    ' t         outline',
     ' J K       next / previous heading',
     ' 1-9       jump to a heading',
     ' /         find    n N  match',
     ' ctrl+p    file picker',
-    ' P         folder browser',
     ' H         recent files',
     ' w         watch for saves',
     ' ctrl+e    open in $EDITOR',
@@ -510,119 +390,54 @@ export function App({
 
   return (
     <Box width={cols} height={rows} flexDirection="column">
-      <Box height={bodyH} flexDirection="row">
-        {browsing ? (
-          <Box width={sidebarW} height={bodyH} flexDirection="column">
-            <Text backgroundColor={SIDE} color={MUTED} bold wrap="truncate">
-              {pad(' EXPLORER', sidebarW)}
-            </Text>
-            <Text backgroundColor={SIDE} color={TEXT} wrap="truncate">
-              {pad(`${rootOpen ? '▾' : '▸'} ${tree.name}`, sidebarW)}
-            </Text>
-            {treeSlice.map((row) => {
-              const active = row.node.path === (treeRows[selectedIndex]?.node.path || '')
-              const open = row.node.kind === 'dir' && expanded.has(row.node.path)
-              const label = rowLabel(row.node, row.depth + 1, open)
-              const badge = git[row.node.path]
-              const room = sidebarW - (badge ? 1 : 0)
-              const shown = label.length > room ? `${label.slice(0, Math.max(1, room - 1))}…` : label.padEnd(room)
-              return (
-                <Text key={row.node.path} backgroundColor={active ? SELECT : SIDE} wrap="truncate">
-                  <Text backgroundColor={active ? SELECT : SIDE} color={active ? '#ffffff' : TEXT}>
-                    {shown}
-                  </Text>
-                  {badge ? (
-                    <Text backgroundColor={active ? SELECT : SIDE} color={active ? '#ffffff' : badgeColor(badge)}>
-                      {badge}
-                    </Text>
-                  ) : null}
-                </Text>
-              )
-            })}
-            {tree.truncated ? (
-              <Text backgroundColor={SIDE} color={MUTED} wrap="truncate">
-                {pad(' …more files', sidebarW)}
+      {picking ? (
+        <Box width={cols} height={bodyH} flexDirection="column">
+          <Text backgroundColor={SIDE} color={MUTED} bold wrap="truncate">
+            {pad(screen === 'history' ? ' RECENT' : ' OPEN FILE', cols)}
+          </Text>
+          <Text backgroundColor="#252526" color="#ffffff" wrap="truncate">
+            {pad(` /${query}`, cols)}
+          </Text>
+          {pickSlice.map((item, index) => {
+            const absolute = listStart + index
+            const active = absolute === shownPick
+            const bg = active ? SELECT : EDITOR
+            return (
+              <Text key={item} backgroundColor={bg} color={active ? '#ffffff' : TEXT} wrap="truncate">
+                {pad(` ${item}`, cols)}
               </Text>
-            ) : null}
-            <Fill count={bodyH - treeHeader - treeSlice.length - (tree.truncated ? 1 : 0)} width={sidebarW} bg={SIDE} />
-          </Box>
-        ) : null}
-        {reading && toc && !help ? (
-          <Box width={sidebarW} height={bodyH} flexDirection="column">
-            <Text backgroundColor={SIDE} color={MUTED} bold wrap="truncate">
-              {pad(' OUTLINE', sidebarW)}
-            </Text>
-            {tocSlice.map((heading, index) => {
-              const active = tocStart + index === activeHeading
-              const label = `${'  '.repeat(Math.max(0, heading.depth - 1))}${heading.text || 'Untitled'}`
-              return (
-                <Text key={heading.id} backgroundColor={active ? SELECT : SIDE} color={active ? '#ffffff' : TEXT} wrap="truncate">
-                  {pad(label, sidebarW)}
-                </Text>
-              )
-            })}
-            {headings.length === 0 ? (
-              <Text backgroundColor={SIDE} color={MUTED} wrap="truncate">
-                {pad(' No headings', sidebarW)}
-              </Text>
-            ) : null}
-            <Fill count={bodyH - 1 - tocSlice.length - (headings.length === 0 ? 1 : 0)} width={sidebarW} bg={SIDE} />
-          </Box>
-        ) : null}
-        {sidebarW > 0 ? (
-          <Box width={1} flexDirection="column">
-            <Fill count={bodyH} width={1} bg="#2b2b2b" />
-          </Box>
-        ) : null}
-        {picking ? (
-          <Box width={cols} height={bodyH} flexDirection="column">
-            <Text backgroundColor={SIDE} color={MUTED} bold wrap="truncate">
-              {pad(screen === 'history' ? ' RECENT' : ' OPEN FILE', cols)}
-            </Text>
-            <Text backgroundColor="#252526" color="#ffffff" wrap="truncate">
-              {pad(` /${query}`, cols)}
-            </Text>
-            {pickSlice.map((item, index) => {
-              const absolute = listStart + index
-              const active = absolute === shownPick
-              const bg = active ? SELECT : EDITOR
-              return (
-                <Text key={item} backgroundColor={bg} color={active ? '#ffffff' : TEXT} wrap="truncate">
-                  {pad(` ${item}`, cols)}
-                </Text>
-              )
-            })}
-            {pickRows.length === 0 ? (
-              <Text backgroundColor={EDITOR} color={MUTED} wrap="truncate">
-                {pad(' No matches', cols)}
-              </Text>
-            ) : null}
-            <Fill count={listH - pickSlice.length - (pickRows.length === 0 ? 1 : 0)} width={cols} bg={EDITOR} />
-          </Box>
-        ) : (
-          <Box width={editorW} height={bodyH} flexDirection="column">
-            <Text wrap="truncate">
-              <Text backgroundColor={EDITOR} color="#ffffff">
-                {tabShown}
-              </Text>
-              <Text backgroundColor={SIDE} color={MUTED}>
-                {padRight(modeLabel, editorW - tabShown.length)}
-              </Text>
-            </Text>
+            )
+          })}
+          {pickRows.length === 0 ? (
             <Text backgroundColor={EDITOR} color={MUTED} wrap="truncate">
-              {pad(` ${crumb}`, editorW)}
+              {pad(' No matches', cols)}
             </Text>
-            {help
-              ? helpLines.slice(0, previewH).map((line, index) => (
-                  <Text key={index} backgroundColor={EDITOR} color={TEXT} wrap="truncate">
-                    {pad(line, editorW)}
-                  </Text>
-                ))
-              : slice.map((line, index) => <Spans key={index} spans={line} width={editorW} />)}
-            <Fill count={previewH - (help ? Math.min(helpLines.length, previewH) : slice.length)} width={editorW} bg={EDITOR} />
-          </Box>
-        )}
-      </Box>
+          ) : null}
+          <Fill count={listH - pickSlice.length - (pickRows.length === 0 ? 1 : 0)} width={cols} bg={EDITOR} />
+        </Box>
+      ) : (
+        <Box width={editorW} height={bodyH} flexDirection="column">
+          <Text wrap="truncate">
+            <Text backgroundColor={EDITOR} color="#ffffff">
+              {tabShown}
+            </Text>
+            <Text backgroundColor={SIDE} color={MUTED}>
+              {padRight(modeLabel, editorW - tabShown.length)}
+            </Text>
+          </Text>
+          <Text backgroundColor={EDITOR} color={MUTED} wrap="truncate">
+            {pad(` ${crumb}`, editorW)}
+          </Text>
+          {help
+            ? helpLines.slice(0, previewH).map((line, index) => (
+                <Text key={index} backgroundColor={EDITOR} color={TEXT} wrap="truncate">
+                  {pad(line, editorW)}
+                </Text>
+              ))
+            : slice.map((line, index) => <Spans key={index} spans={line} width={editorW} />)}
+          <Fill count={previewH - (help ? Math.min(helpLines.length, previewH) : slice.length)} width={editorW} bg={EDITOR} />
+        </Box>
+      )}
       <Text backgroundColor={STATUS} color="#ffffff" wrap="truncate">
         {status.slice(0, cols).padEnd(cols)}
       </Text>

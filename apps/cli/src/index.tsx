@@ -11,10 +11,9 @@ const VERSION = pkg.version
 function help() {
   console.log(`tui-md ${VERSION}
 
-Read markdown in the terminal. A folder opens the file picker. A file opens that file.
+Read markdown in the terminal. No path opens the file picker. A file opens that file.
 
   tui-md [path]
-  tui-md --picker [dir]
   tui-md --history
   tui-md --last
   tui-md --watch file.md
@@ -22,11 +21,9 @@ Read markdown in the terminal. A folder opens the file picker. A file opens that
 
 Keys
   j k        scroll the file
-  t          show or hide the outline
   J K        next and previous heading
   1-9        jump to a heading
   ctrl+p     file picker
-  P          folder browser
   H          recent files
   /          find          n N  next and previous match
   w          watch the file for saves
@@ -36,14 +33,13 @@ Keys
 `)
 }
 
-type Screen = 'read' | 'fuzzy' | 'browser' | 'history'
+type Screen = 'read' | 'fuzzy' | 'history'
 
 const args = process.argv.slice(2)
 let dump = false
 let inline: string | undefined
 let width = process.stdout.columns || 100
 let watch = false
-let picker = false
 let history = false
 let last = false
 let fuzzy = ''
@@ -64,7 +60,6 @@ for (let i = 0; i < args.length; i++) {
     if (arg === '--inline' && next && !next.startsWith('-')) inline = args[++i]
   } else if (arg === '--width') width = Number(args[++i] || width)
   else if (arg === '--watch' || arg === '-w') watch = true
-  else if (arg === '--picker') picker = true
   else if (arg === '--history' || arg === '-H') history = true
   else if (arg === '--last' || arg === '-l') last = true
   else if (arg === '--fuzzy') fuzzy = args[++i] || ''
@@ -124,7 +119,6 @@ if (stdinText != null && !positionals.length) {
   const root = stat.isDirectory() ? target : path.dirname(target)
   const initialFile = stat.isDirectory() ? undefined : path.relative(root, target).split(path.sep).join('/')
   let screen: Screen = initialFile ? 'read' : 'fuzzy'
-  if (!initialFile && picker) screen = 'browser'
   if (!initialFile && history) screen = 'history'
   await launch(root, initialFile, screen, undefined)
 }
