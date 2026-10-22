@@ -44,6 +44,15 @@ function openInEditor(command: string | undefined, file: string, line: number) {
   spawn(parts[0] || 'nano', [...parts.slice(1), file], { detached: true, stdio: 'ignore' }).unref()
 }
 
+function counted(lead: string, fallback: number): number {
+  const n = lead ? Number(lead) : fallback
+  return Number.isFinite(n) && n > 0 ? n : fallback
+}
+
+function clamp(value: number, max: number): number {
+  return Math.min(max, Math.max(0, value))
+}
+
 export function App({
   root: initialRoot,
   initialFile,
@@ -80,6 +89,9 @@ export function App({
   const [hit, setHit] = useState(0)
   const [source, setSource] = useState(false)
   const [help, setHelp] = useState(false)
+  const [command, setCommand] = useState<string | null>(null)
+  const [lead, setLead] = useState('')
+  const [chord, setChord] = useState('')
   const [scroll, setScroll] = useState(0)
   const [pan, setPan] = useState(0)
   const [piped, setPiped] = useState<string | null>(stdinText ?? null)
@@ -165,7 +177,8 @@ export function App({
   const maxScroll = Math.max(0, lines.length - previewH)
   if (lastFile === opened && scroll > maxScroll) setScroll(maxScroll)
   const viewW = editorW
-  const wide = lines.some((line) => spanWidth(line) > viewW)
+  const contentW = lines.reduce((widest, line) => Math.max(widest, spanWidth(line)), 0)
+  const wide = contentW > viewW
   const activeHeading = headings.reduce((at, heading, index) => (heading.line <= scroll ? index : at), 0)
 
   const hits = useMemo(() => {
@@ -188,7 +201,7 @@ export function App({
     const target = hits[index]
     if (!target) return
     setHit(index)
-    setScroll(Math.min(maxScroll, Math.max(0, target.line - Math.floor(previewH / 3))))
+    setScroll(clamp(target.line - Math.floor(previewH / 3), maxScroll))
     if (target.col < pan || target.col + find.length > pan + viewW) setPan(Math.max(0, target.col - 4))
   }
 
@@ -213,6 +226,16 @@ export function App({
   const fileName = usingPipe ? 'stdin' : opened ? opened.split('/').pop() || opened : 'Welcome'
   const crumb = usingPipe ? 'stdin' : opened ? opened.split('/').join('  ›  ') : tree.name
 
+  const clearCount = () => {
+    setLead('')
+    setChord('')
+  }
+
+  const scrollBy = (delta: number) => {
+    clearCount()
+    setScroll((value) => clamp(value + delta, maxScroll))
+  }
+
   const openRel = (rel: string) => {
     setPiped(null)
     setOpened(rel)
@@ -221,6 +244,8 @@ export function App({
     setPickIndex(0)
     setHelp(false)
     setFindInput(false)
+    setCommand(null)
+    clearCount()
   }
 
   const openAbs = (abs: string) => {
@@ -239,6 +264,8 @@ export function App({
     setPickIndex(0)
     setHelp(false)
     setFindInput(false)
+    setCommand(null)
+    clearCount()
   }
 
   const showHistory = () => {
@@ -248,17 +275,33 @@ export function App({
     setPickIndex(0)
     setHelp(false)
     setFindInput(false)
+    setCommand(null)
+    clearCount()
   }
 
   const jumpHeading = (index: number) => {
     const heading = headings[index]
     if (!heading) return
-    setScroll(Math.min(maxScroll, Math.max(0, heading.line)))
+    clearCount()
+    setScroll(clamp(heading.line, maxScroll))
   }
+
+  const half = Math.max(1, Math.floor(previewH / 2))
 
   useInput((input, key) => {
     if (help) {
       if (input === '?' || key.escape || input === 'q') setHelp(false)
+      return
+    }
+    if (command != null) {
+      if (key.escape) setCommand(null)
+      else if (key.return) {
+        const cmd = command.trim()
+        setCommand(null)
+        if (cmd === 'q' || cmd === 'quit' || cmd === 'q!') exit()
+        else if (/^\d+$/.test(cmd)) setScroll(clamp(Number(cmd) - 1, maxScroll))
+      } else if (key.backspace || key.delete) setCommand((value) => (value ?? '').slice(0, -1))
+      else if (input && !key.ctrl && !key.meta && input.length === 1) setCommand((value) => (value ?? '') + input)
       return
     }
     if (findInput) {
@@ -273,6 +316,8 @@ export function App({
       return
     }
     if (picking) {
+      const last = Math.max(0, pickRows.length - 1)
+      const move = (delta: number) => setPickIndex((value) => clamp(value + delta, last))
       if (key.escape) {
         if (query) setQuery('')
         else if (opened || piped != null) setScreen('read')
@@ -284,8 +329,15 @@ export function App({
         else openRel(pickRows[shownPick])
         return
       }
-      if (key.downArrow || (input === 'j' && key.ctrl)) setPickIndex((value) => Math.min(pickRows.length - 1, value + 1))
-      else if (key.upArrow || (input === 'k' && key.ctrl)) setPickIndex((value) => Math.max(0, value - 1))
+      const listHalf = Math.max(1, Math.floor(listH / 2))
+      if (key.downArrow || (key.ctrl && (input === 'j' || input === 'n'))) move(1)
+      else if (key.upArrow || (key.ctrl && (input === 'k' || input === 'p'))) move(-1)
+      else if (key.ctrl && input === 'd') move(listHalf)
+      else if (key.ctrl && input === 'u') move(-listHalf)
+      else if (key.ctrl && input === 'f') move(listH)
+      else if (key.ctrl && input === 'b') move(-listH)
+      else if (key.pageDown) move(listH)
+      else if (key.pageUp) move(-listH)
       else if (key.backspace || key.delete) setQuery((value) => value.slice(0, -1))
       else if (input && !key.ctrl && !key.meta && input.length === 1) {
         setQuery((value) => value + input)
@@ -296,13 +348,15 @@ export function App({
     if (key.escape) {
       setFind('')
       setHelp(false)
+      clearCount()
       return
     }
-    if (input === 'q') {
+    if (input === 'q' && !key.ctrl) {
       exit()
       return
     }
-    if (input === '?' ) {
+    if (input === '?') {
+      clearCount()
       setHelp(true)
       return
     }
@@ -314,25 +368,37 @@ export function App({
       showHistory()
       return
     }
-    if (input === '/' || (key.ctrl && input === 'f')) {
+    if (input === ':') {
+      clearCount()
+      setCommand('')
+      return
+    }
+    if (input === '/') {
+      clearCount()
       setFind('')
       setFindInput(true)
       return
     }
-    if (hits.length && (input === 'n' || input === 'N')) {
-      reveal(input === 'n' ? (currentHit + 1) % hits.length : (currentHit - 1 + hits.length) % hits.length)
+    if (hits.length && !key.ctrl && (input === 'n' || input === 'N')) {
+      const step = counted(lead, 1) % hits.length
+      clearCount()
+      const dir = input === 'n' ? step : (hits.length - step) % hits.length
+      reveal((currentHit + dir) % hits.length)
       return
     }
-    if (input === 's' && markdown) {
+    if (input === 's' && !key.ctrl && markdown) {
+      clearCount()
       setSource((value) => !value)
       setScroll(0)
       return
     }
-    if (input === 'w' && !usingPipe) {
+    if (input === 'w' && !key.ctrl && !usingPipe) {
+      clearCount()
       setWatch((value) => !value)
       return
     }
-    if (input === 'r') {
+    if (input === 'r' && !key.ctrl) {
+      clearCount()
       setReload((value) => value + 1)
       setTreeTick((value) => value + 1)
       return
@@ -341,46 +407,136 @@ export function App({
       openInEditor(editor, path.resolve(root, opened), scroll + 1)
       return
     }
-    if (input >= '1' && input <= '9') {
-      jumpHeading(Number(input) - 1)
+    if (chord && input !== 'g') setChord('')
+    if (input === 'g' && !key.ctrl) {
+      if (chord === 'g') {
+        const line = lead ? Number(lead) : 1
+        clearCount()
+        setScroll(clamp(line - 1, maxScroll))
+      } else setChord('g')
       return
     }
-    if (input === 'J') jumpHeading(Math.min(headings.length - 1, activeHeading + 1))
-    else if (input === 'K') jumpHeading(Math.max(0, activeHeading - 1))
-    else if (key.upArrow || input === 'k') setScroll((value) => Math.max(0, value - 1))
-    else if (key.downArrow || input === 'j') setScroll((value) => Math.min(maxScroll, value + 1))
-    else if (key.pageUp || input === 'u') setScroll((value) => Math.max(0, value - previewH))
-    else if (key.pageDown || input === 'd') setScroll((value) => Math.min(maxScroll, value + previewH))
-    else if (input === 'g') setScroll(0)
-    else if (input === 'G') setScroll(maxScroll)
-    else if (key.leftArrow || input === 'h') setPan((value) => Math.max(0, value - 4))
-    else if (key.rightArrow || input === 'l') setPan((value) => value + 4)
+    if (input === 'G') {
+      const line = lead ? Number(lead) : maxScroll + 1
+      clearCount()
+      setScroll(clamp(line - 1, maxScroll))
+      return
+    }
+    if (!key.ctrl && input.length === 1 && input >= '0' && input <= '9') {
+      if (input === '0' && !lead) {
+        setPan(0)
+        return
+      }
+      setLead((value) => value + input)
+      return
+    }
+    if (input === 'J' || input === 'K') {
+      const step = counted(lead, 1)
+      const dir = input === 'J' ? 1 : -1
+      clearCount()
+      jumpHeading(clamp(activeHeading + dir * step, Math.max(0, headings.length - 1)))
+      return
+    }
+    if (key.ctrl && (input === 'd' || input === 'f')) {
+      scrollBy((input === 'd' ? half : previewH) * counted(lead, 1))
+      return
+    }
+    if (key.ctrl && (input === 'u' || input === 'b')) {
+      scrollBy(-(input === 'u' ? half : previewH) * counted(lead, 1))
+      return
+    }
+    if (!key.ctrl && (input === 'd' || key.pageDown)) {
+      scrollBy(previewH * counted(lead, 1))
+      return
+    }
+    if (!key.ctrl && (input === 'u' || key.pageUp)) {
+      scrollBy(-previewH * counted(lead, 1))
+      return
+    }
+    if (!key.ctrl && (key.downArrow || input === 'j')) {
+      scrollBy(counted(lead, 1))
+      return
+    }
+    if (!key.ctrl && (key.upArrow || input === 'k')) {
+      scrollBy(-counted(lead, 1))
+      return
+    }
+    if (!key.ctrl && (key.leftArrow || input === 'h')) {
+      const step = counted(lead, 1)
+      clearCount()
+      setPan((value) => Math.max(0, value - step))
+      return
+    }
+    if (!key.ctrl && (key.rightArrow || input === 'l')) {
+      const step = counted(lead, 1)
+      clearCount()
+      setPan((value) => value + step)
+      return
+    }
+    if (input === '$') {
+      clearCount()
+      setPan(Math.max(0, contentW - viewW))
+      return
+    }
+    if (input === '^') {
+      clearCount()
+      setPan(0)
+      return
+    }
+    if (input === '|' ) {
+      const col = counted(lead, 1)
+      clearCount()
+      setPan(Math.max(0, col - 1))
+      return
+    }
+    if (input === '}' || input === '{') {
+      const step = counted(lead, 1)
+      clearCount()
+      let at = scroll
+      const blank = (index: number) => !lines[index]?.some((span) => span.text.trim())
+      for (let n = 0; n < step; n++) {
+        if (input === '}') {
+          while (at < lines.length - 1 && blank(at)) at++
+          while (at < lines.length - 1 && !blank(at)) at++
+        } else {
+          if (at > 0) at--
+          while (at > 0 && blank(at)) at--
+          while (at > 0 && !blank(at)) at--
+        }
+      }
+      setScroll(clamp(at, maxScroll))
+    }
   })
 
   const mode = !markdown && !mermaidFile ? 'TEXT' : source ? 'SOURCE' : 'PREVIEW'
   const percent = lines.length <= previewH ? 100 : Math.round((scroll / Math.max(1, maxScroll)) * 100)
   const count = hits.length ? `${currentHit + 1}/${hits.length}` : find ? 'no match' : ''
-  const status = findInput
-    ? ` Find: ${find}▏   ${count}   ↑↓ match   enter keep   esc cancel `
-    : picking
-      ? ` ${screen === 'history' ? 'Recent' : 'Files'}   ${pickRows.length ? `${shownPick + 1}/${pickRows.length}` : 'no matches'}   type to filter   enter open   esc back `
-      : ` ${tree.name}   ${mode}${watch ? '  watch' : ''}   ${usingPipe ? 'stdin' : opened || 'no file'}   ${percent}%${
-            wide ? '   ↔ pan' : ''
-          }${find ? `   "${find}" ${count}   n N` : ''}   ^p files   H recent   / find   q quit `
+  const status = command != null
+    ? ` :${command}▏ `
+    : findInput
+      ? ` /${find}▏   ${count}   ↑↓ match   enter keep   esc cancel `
+      : picking
+        ? ` ${screen === 'history' ? 'Recent' : 'Files'}   ${pickRows.length ? `${shownPick + 1}/${pickRows.length}` : 'no matches'}   type to filter   enter open   esc ${opened || piped != null ? 'back' : 'quit'} `
+        : ` ${tree.name}   ${mode}${watch ? '  watch' : ''}   ${usingPipe ? 'stdin' : opened || 'no file'}   ${percent}%${
+            wide ? '   ↔' : ''
+          }${find ? `   /${find} ${count}` : ''}   j k  gg G  ^d ^u  /  ^p  q `
 
   const helpLines = [
     ' tui-md',
     '',
-    ' j k       scroll',
-    ' d u       page',
-    ' g G       top / bottom',
-    ' J K       next / previous heading',
-    ' 1-9       jump to a heading',
-    ' /         find    n N  match',
-    ' ctrl+p    file picker',
+    ' j k       scroll          5j  count',
+    ' h l       pan             0 $  start / end',
+    ' ctrl-d u  half page       ctrl-f b  full page',
+    ' d u       full page',
+    ' gg G      top / bottom    12G  line 12',
+    ' { }       paragraph',
+    ' J K       heading',
+    ' / n N     find',
+    ' ctrl-p    markdown files',
     ' H         recent files',
-    ' w         watch for saves',
-    ' ctrl+e    open in $EDITOR',
+    ' :q        quit            :12  go to line',
+    ' w         watch           r reload',
+    ' ctrl-e    open in $EDITOR',
     ' s         preview / source',
     ' q         quit',
   ]

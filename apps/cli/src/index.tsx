@@ -20,12 +20,16 @@ Read markdown in the terminal. No path opens the file picker. A file opens that 
   tui-md --inline [plain|ansi|N] file.md
 
 Keys
-  j k        scroll the file
-  J K        next and previous heading
-  1-9        jump to a heading
-  ctrl+p     file picker
+  j k        scroll            5j   repeat
+  h l        pan               0 $  start and end of the line
+  ctrl-d u   half page         ctrl-f b  full page
+  gg G       top and bottom    12G  go to line 12
+  { }        previous and next paragraph
+  J K        previous and next heading
+  /          find              n N  next and previous match
+  ctrl-p     file picker
   H          recent files
-  /          find          n N  next and previous match
+  :q         quit              :12  go to line 12
   w          watch the file for saves
   ctrl+e     open the file in $EDITOR
   s          preview or source
