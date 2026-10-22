@@ -16,7 +16,6 @@ import { Preview } from './Preview'
 import { Tree } from './Tree'
 
 type Kind = 'markdown' | 'mermaid' | 'text' | 'binary'
-type Side = 'toc' | 'files' | 'closed'
 type Palette = 'files' | 'history' | null
 type HistItem = { root: string; path: string }
 
@@ -84,7 +83,7 @@ export function App() {
   const [active, setActive] = useState<string | null>(null)
   const [bodies, setBodies] = useState<Record<string, ReadResult>>({})
   const [mode, setMode] = useState<'preview' | 'source'>('preview')
-  const [side, setSide] = useState<Side>('toc')
+  const [outlineOpen, setOutlineOpen] = useState(true)
   const [sideW, setSideW] = useState(280)
   const [palette, setPalette] = useState<Palette>(null)
   const [paletteQuery, setPaletteQuery] = useState('')
@@ -115,9 +114,8 @@ export function App() {
       setExpanded(new Set([...defaultExpanded(listed.nodes), ...(first ? ancestorDirs(first) : [])]))
       if (first) {
         setActive(first)
-        setSide('toc')
         if (info?.path) remember(info.path, first)
-      } else setSide('files')
+      }
     })().catch((error: unknown) => {
       if (!cancel) setRootName(error instanceof Error ? error.message : 'Unable to open folder')
     })
@@ -194,8 +192,7 @@ export function App() {
         setFindOpen(false)
         return
       }
-      if (event.key === 't') setSide((value) => (value === 'toc' ? 'closed' : 'toc'))
-      else if (event.key === 'p' || event.key === 'P') setSide('files')
+      if (event.key === 't') setOutlineOpen((value) => !value)
       else if (event.key === 'H') {
         setPalette('history')
         setPaletteQuery('')
@@ -264,7 +261,6 @@ export function App() {
       return next
     })
     setRootOpen(true)
-    setSide('toc')
     setPalette(null)
     if (!isMarkdown(rel)) setMode('source')
     else setMode('preview')
@@ -280,7 +276,6 @@ export function App() {
     setActive(null)
     setBodies({})
     setExpanded(new Set())
-    setSide('toc')
     setGeneration((value) => value + 1)
   }
 
@@ -302,9 +297,6 @@ export function App() {
       <header className="titlebar">
         <span className="title">{active ? `${fileName} — ${rootName}` : rootName}</span>
         <div className="title-actions">
-          <button type="button" className={side === 'files' ? 'on' : ''} onClick={() => setSide('files')}>
-            Files
-          </button>
           <button
             type="button"
             onClick={() => {
@@ -315,7 +307,7 @@ export function App() {
           >
             Recent
           </button>
-          <button type="button" className={side === 'toc' ? 'on' : ''} onClick={() => setSide((value) => (value === 'toc' ? 'closed' : 'toc'))}>
+          <button type="button" className={outlineOpen ? 'on' : ''} onClick={() => setOutlineOpen((value) => !value)}>
             Outline
           </button>
           {desktop ? (
@@ -336,41 +328,43 @@ export function App() {
         </div>
       </header>
       <div className="body">
-        {side !== 'closed' ? (
-          <aside className="sidebar" style={{ width: sideW }}>
-            <div className="side-title">{side === 'files' ? 'Explorer' : 'Outline'}</div>
-            {side === 'files' ? (
-              <div className="side-scroll">
-                {hasRoot ? (
-                  <div className="tree-row root-row" style={{ paddingLeft: 8 }} onClick={() => setRootOpen((value) => !value)}>
-                    <Chevron open={rootOpen} />
-                    <FolderIcon open={rootOpen} />
-                    <span className="name">{rootName}</span>
-                  </div>
-                ) : (
-                  <div className="more">No folder open</div>
-                )}
-                {hasRoot && rootOpen ? (
-                  <Tree
-                    nodes={tree.nodes}
-                    depth={1}
-                    expanded={expanded}
-                    selected={active || ''}
-                    git={git}
-                    onToggle={(rel) =>
-                      setExpanded((current) => {
-                        const next = new Set(current)
-                        if (next.has(rel)) next.delete(rel)
-                        else next.add(rel)
-                        return next
-                      })
-                    }
-                    onOpen={openFile}
-                  />
-                ) : null}
-                {tree.truncated ? <div className="more">More files were not shown</div> : null}
+        <aside className="sidebar" style={{ width: sideW }}>
+          <div className="side-title">Explorer</div>
+          <div className="side-scroll">
+            {hasRoot ? (
+              <div className="tree-row root-row" style={{ paddingLeft: 8 }} onClick={() => setRootOpen((value) => !value)}>
+                <Chevron open={rootOpen} />
+                <FolderIcon open={rootOpen} />
+                <span className="name">{rootName}</span>
               </div>
             ) : (
+              <div className="more">No folder open</div>
+            )}
+            {hasRoot && rootOpen ? (
+              <Tree
+                nodes={tree.nodes}
+                depth={1}
+                expanded={expanded}
+                selected={active || ''}
+                git={git}
+                onToggle={(rel) =>
+                  setExpanded((current) => {
+                    const next = new Set(current)
+                    if (next.has(rel)) next.delete(rel)
+                    else next.add(rel)
+                    return next
+                  })
+                }
+                onOpen={openFile}
+              />
+            ) : null}
+            {tree.truncated ? <div className="more">More files were not shown</div> : null}
+          </div>
+          <div className={outlineOpen ? 'outline open' : 'outline'}>
+            <button type="button" className="side-title" onClick={() => setOutlineOpen((value) => !value)}>
+              Outline
+            </button>
+            {outlineOpen ? (
               <div className="side-scroll">
                 {outline.map((heading) => (
                   <button
@@ -388,10 +382,10 @@ export function App() {
                 ))}
                 {outline.length === 0 ? <div className="more">No headings</div> : null}
               </div>
-            )}
-          </aside>
-        ) : null}
-        {side !== 'closed' ? <div className="sash" onMouseDown={startResize} /> : null}
+            ) : null}
+          </div>
+        </aside>
+        <div className="sash" onMouseDown={startResize} />
         <main className="editor">
           <div className="tabs">
             {active ? (
@@ -450,7 +444,7 @@ export function App() {
           <span>{rootName}</span>
           <span>{active || 'No file open'}</span>
           <span>
-            t outline {modLabel}P files H recent / find
+            {modLabel}P files  t outline  H recent  / find
           </span>
         </div>
         <div>

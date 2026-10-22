@@ -82,7 +82,9 @@ button { background: none; border: 0; padding: 0; }
   color: #bbbbbb;
   width: 100%;
   text-align: left;
+  flex: none;
 }
+.outline { display: flex; flex-direction: column; min-height: 0; }
 .side-scroll, .outline.open { overflow: auto; min-height: 0; }
 .side-scroll { flex: 1; }
 .outline { border-top: 1px solid var(--border); }

@@ -152,7 +152,7 @@ Reading a file is the whole screen. There is no sidebar. `tui-md` with no path o
 
 `tui-md --history` and `tui-md --last` use the recent-file list in `~/.config/tui-md/history`. `tui-md --watch file.md` reloads when that file is saved. `tui-md --inline` prints one file and exits, which is the same idea as `--dump`. A pipe works too: `cat notes.md | tui-md`.
 
-The desktop window opens on the document, with the outline in the sidebar. **Files** or **Cmd/Ctrl+P** jumps to a file, **Recent** or **H** opens files you have already read, and **Cmd/Ctrl+O** opens a folder. The open file reloads when it changes on disk. Preview is read-only.
+The desktop window keeps the files on the left and the outline under them. **Cmd/Ctrl+P** searches markdown in the open folder. **Recent** or **H** opens files you have already read, and **Cmd/Ctrl+O** opens a folder. The open file reloads when it changes on disk. Preview is read-only.
 
 ## Diagrams
 
