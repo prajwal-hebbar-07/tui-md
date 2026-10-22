@@ -66,7 +66,7 @@ test('labeled arrow syntax and left-to-right graphs render', () => {
   assert.match(diagram, /►/)
 })
 
-test('quoted labels, subgraphs, and dotted or two-way edges render', () => {
+test('quoted labels, subgraphs, and dotted or two-way edges', () => {
   const lines = renderMermaid(architecture, 120)
   const diagram = lines.join('\n')
   if (process.env.SHOW) console.log(diagram)
@@ -129,6 +129,18 @@ test('sequence, pie, and class diagrams stay readable', () => {
   ).join('\n')
   assert.match(classes, /Document/)
   assert.match(classes, /path/)
+})
+
+test('state diagrams draw start, end, and composite states', () => {
+  const diagram = renderMermaid(
+    'stateDiagram-v2\n[*] --> Idle\nstate Busy {\n  [*] --> Working\n  Working --> Done\n}\nIdle --> Busy: start\nBusy --> [*]',
+    80,
+  ).join('\n')
+  if (process.env.SHOW) console.log(diagram)
+  assert.match(diagram, /●/)
+  assert.match(diagram, /◉/)
+  assert.match(diagram, /┌─ Busy ─/)
+  assert.match(diagram, /start/)
 })
 
 test('unknown diagrams keep their source', () => {

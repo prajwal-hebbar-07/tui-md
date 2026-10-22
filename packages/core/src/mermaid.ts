@@ -1,4 +1,11 @@
-import { renderFlowchart } from './flowchart.js'
+import {
+  layoutFlow,
+  redirectGroupEdges,
+  renderFlowchart,
+  type Flow,
+  type FlowEdge,
+  type FlowNode,
+} from './flowchart.js'
 import { renderSequence } from './sequence.js'
 import { centerText, wrapText } from './text.js'
 
@@ -597,27 +604,41 @@ function renderClass(src: string, width: number): string[] {
 }
 
 function renderState(src: string, width: number): string[] {
-  const nodes = new Map<string, MNode>()
-  const edges: MEdge[] = []
-  const ensure = (id: string, label = id, shape: Shape = 'round') => {
-    if (!nodes.has(id)) nodes.set(id, { id, label, shape })
+  const flow: Flow = { dir: 'TD', nodes: new Map(), edges: [], groups: new Map() }
+  const stack: string[] = []
+  const ensure = (id: string, label = id, shape: FlowNode['shape'] = 'round') => {
+    if (!flow.nodes.has(id)) flow.nodes.set(id, { id, label, shape, group: stack[stack.length - 1] ?? null })
   }
   for (const raw of src.split('\n')) {
     const line = raw.trim()
-    if (!line || /^stateDiagram/.test(line) || line.startsWith('%%') || line === 'direction TB' || line === 'direction LR') continue
+    if (!line || /^stateDiagram/.test(line) || line.startsWith('%%')) continue
+    const direction = /^direction\s+(TB|TD|BT|LR|RL)\b/i.exec(line)
+    if (direction) {
+      if (!stack.length) flow.dir = direction[1].toUpperCase()
+      continue
+    }
     const alias = /^state\s+"([^"]+)"\s+as\s+(\w+)/.exec(line)
+    const composite = /^state\s+(?:"([^"]+)"\s+as\s+)?(\w+)\s*\{/.exec(line)
+    if (composite) {
+      flow.groups.set(composite[2], { id: composite[2], title: composite[1] || composite[2], parent: stack[stack.length - 1] ?? null })
+      stack.push(composite[2])
+      continue
+    }
     if (alias) {
       ensure(alias[2], alias[1])
       continue
     }
-    if (/^state\s+\w+\s*\{/.test(line) || line === '}' || line === 'end') continue
+    if (line === '}') {
+      stack.pop()
+      continue
+    }
     const trans = /^(.*?)\s*-->\s*(.*?)(?:\s*:\s*(.*))?$/.exec(line)
     if (!trans) continue
     const side = (token: string, target: boolean) => {
       const value = token.trim().replace(/^"|"$/g, '')
       if (value === '[*]') {
-        const id = target ? '__end' : '__start'
-        ensure(id, '*', 'circle')
+        const id = `${target ? '__end' : '__start'}${stack.length ? `_${stack[stack.length - 1]}` : ''}`
+        ensure(id, target ? '◉' : '●', 'circle')
         return id
       }
       ensure(value)
@@ -625,10 +646,12 @@ function renderState(src: string, width: number): string[] {
     }
     const from = side(trans[1], false)
     const to = side(trans[2], true)
-    edges.push({ from, to, label: (trans[3] || '').trim(), kind: 'arrow' })
+    const edge: FlowEdge = { from, to, label: (trans[3] || '').trim(), style: 'solid', head: 'arrow', tail: 'none' }
+    flow.edges.push(edge)
   }
-  if (!nodes.size) return fallback('stateDiagram', src, width)
-  return layoutGraph('TD', nodes, edges, width)
+  if (!flow.nodes.size) return fallback('stateDiagram', src, width)
+  redirectGroupEdges(flow)
+  return layoutFlow(flow, width)
 }
 
 function renderEr(src: string, width: number): string[] {
