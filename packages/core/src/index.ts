@@ -1,3 +1,4 @@
+export { renderMermaid } from './mermaid.js'
 export { linesToAnsi, linesToPlain, sliceSpans, spanWidth, type Span } from './text.js'
 export {
   ancestorDirs,
