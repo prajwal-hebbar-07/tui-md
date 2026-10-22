@@ -117,7 +117,8 @@ button { background: none; border: 0; padding: 0; }
   height: 35px;
   display: flex;
   background: var(--chrome);
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
   border-bottom: 1px solid var(--border);
 }
 .tab {
@@ -127,6 +128,7 @@ button { background: none; border: 0; padding: 0; }
   height: 35px;
   padding: 0 8px 0 12px;
   max-width: 220px;
+  flex: none;
   background: var(--chrome);
   border-right: 1px solid var(--border);
   cursor: pointer;

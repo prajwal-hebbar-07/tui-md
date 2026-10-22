@@ -80,6 +80,7 @@ export function App() {
   const [git, setGit] = useState<Record<string, string>>({})
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [rootOpen, setRootOpen] = useState(true)
+  const [tabs, setTabs] = useState<string[]>([])
   const [active, setActive] = useState<string | null>(null)
   const [bodies, setBodies] = useState<Record<string, ReadResult>>({})
   const [mode, setMode] = useState<'preview' | 'source'>('preview')
@@ -113,6 +114,7 @@ export function App() {
       const first = firstMarkdown(listed.nodes)
       setExpanded(new Set([...defaultExpanded(listed.nodes), ...(first ? ancestorDirs(first) : [])]))
       if (first) {
+        setTabs([first])
         setActive(first)
         if (info?.path) remember(info.path, first)
       }
@@ -254,6 +256,7 @@ export function App() {
   }
 
   function openFile(rel: string) {
+    setTabs((current) => (current.includes(rel) ? current : [...current, rel]))
     setActive(rel)
     setExpanded((current) => {
       const next = new Set(current)
@@ -267,12 +270,20 @@ export function App() {
     if (rootPath) remember(rootPath, rel)
   }
 
+  function closeTab(rel: string, event?: ReactMouse) {
+    event?.stopPropagation()
+    const next = tabs.filter((item) => item !== rel)
+    if (active === rel) setActive(next[tabs.indexOf(rel)] ?? next[tabs.indexOf(rel) - 1] ?? null)
+    setTabs(next)
+  }
+
   async function chooseFolder() {
     const next = await api().openFolder()
     if (!next) return
     ready.current = false
     setRootName(next.name)
     setRootPath(next.path)
+    setTabs([])
     setActive(null)
     setBodies({})
     setExpanded(new Set())
@@ -388,12 +399,18 @@ export function App() {
         <div className="sash" onMouseDown={startResize} />
         <main className="editor">
           <div className="tabs">
-            {active ? (
-              <div className="tab active">
-                <FileIcon name={active} />
-                <span>{fileName}</span>
-              </div>
-            ) : null}
+            {tabs.map((rel) => {
+              const name = rel.split('/').pop() || rel
+              return (
+                <div key={rel} className={rel === active ? 'tab active' : 'tab'} onClick={() => openFile(rel)}>
+                  <FileIcon name={rel} />
+                  <span>{name}</span>
+                  <button type="button" className="tab-close" aria-label={`Close ${name}`} onClick={(event) => closeTab(rel, event)}>
+                    ×
+                  </button>
+                </div>
+              )
+            })}
           </div>
           <div className="crumb">
             <span>{rootName}</span>
