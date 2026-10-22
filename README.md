@@ -38,7 +38,7 @@ The desktop app is on the [Releases](https://github.com/prajwal-hebbar-07/tui-md
 xattr -dr com.apple.quarantine /Applications/tui-md.app
 ```
 
-Then run `tui-md` in a folder of notes, or `tui-md path/to/file.md`. The explorer lists only markdown (`.md`, `.mdx`) and Mermaid (`.mmd`) files, and hides folders that contain none.
+Then run `tui-md` in a folder of notes to pick a file, or `tui-md path/to/file.md` to open that file. The picker lists only markdown (`.md`, `.mdx`) and Mermaid (`.mmd`) files, and hides folders that contain none.
 
 ## Develop
 
@@ -130,18 +130,30 @@ git push origin main v0.1.1
 
 ## Keys in the terminal
 
+Reading a file is the whole screen. The outline sits in the sidebar until you hide it. Files are a picker, not a second mode you live in.
+
 | Key | Action |
 | --- | --- |
-| ↑↓ or j k | Move in the tree, or scroll the preview |
-| ← → or h l | Collapse, expand, or pan a wide diagram |
-| tab | Switch between the tree and the preview |
-| s | Toggle preview and source |
+| j k or ↑↓ | Scroll |
+| d u | Page down and up |
+| g G | Top and bottom |
+| t | Show or hide the outline |
+| J K | Next and previous heading |
+| 1-9 | Jump to a heading |
+| ctrl+p | File picker |
+| P | Folder browser |
+| H | Recent files |
 | / or ctrl+f | Find in the open file |
 | n N | Next and previous match |
-| ctrl+p | Filter files |
+| w | Watch the file and reload on save |
+| r | Reload now |
+| ctrl+e | Open the file in `$EDITOR` |
+| s | Toggle preview and source |
 | q | Quit |
 
-The desktop window uses the file tree, **Cmd/Ctrl+P** to jump to a file, and **Cmd/Ctrl+O** to open a folder. Preview is read-only.
+`tui-md` opens the file picker. `tui-md --picker` opens the folder browser. `tui-md --history` and `tui-md --last` use the recent-file list in `~/.config/tui-md/history`. `tui-md --watch file.md` reloads when that file is saved. `tui-md --inline` prints one file and exits, which is the same idea as `--dump`. A pipe works too: `cat notes.md | tui-md`.
+
+The desktop window opens on the document, with the outline in the sidebar. **Files** or **Cmd/Ctrl+P** jumps to a file, **Recent** or **H** opens files you have already read, and **Cmd/Ctrl+O** opens a folder. The open file reloads when it changes on disk. Preview is read-only.
 
 ## Diagrams
 
