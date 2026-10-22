@@ -29,6 +29,27 @@ function findStartRoot() {
 
 let root = findStartRoot()
 
+function webPreferences() {
+  return {
+    preload: path.join(__dirname, 'preload.cjs'),
+    contextIsolation: true,
+    nodeIntegration: false,
+    sandbox: true,
+  }
+}
+
+function attach(win) {
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    shell.openExternal(url)
+    return { action: 'deny' }
+  })
+  win.webContents.on('will-navigate', (event, url) => {
+    if (url.startsWith('http://127.0.0.1:5173') || url.startsWith('file:')) return
+    event.preventDefault()
+    shell.openExternal(url)
+  })
+}
+
 function rootInfo() {
   if (!root) return null
   return { name: path.basename(root) || root, path: root }
@@ -44,23 +65,10 @@ function createWindow() {
     backgroundColor: '#1e1e1e',
     title: 'tui-md',
     ...(mac ? { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 14, y: 12 } } : {}),
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.cjs'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-    },
+    webPreferences: webPreferences(),
   })
 
-  win.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url)
-    return { action: 'deny' }
-  })
-  win.webContents.on('will-navigate', (event, url) => {
-    if (url.startsWith('http://127.0.0.1:5173') || url.startsWith('file:')) return
-    event.preventDefault()
-    shell.openExternal(url)
-  })
+  attach(win)
 
   if (dev) win.loadURL('http://127.0.0.1:5173')
   else win.loadFile(path.join(__dirname, '../dist/index.html'))
