@@ -1,0 +1,18 @@
+export { linesToAnsi, linesToPlain, sliceSpans, spanWidth, type Span } from './text.js'
+export {
+  ancestorDirs,
+  bubbleGit,
+  defaultExpanded,
+  firstMarkdown,
+  flattenFiles,
+  isMarkdown,
+  isMermaidFile,
+  resolveRelative,
+  visibleTree,
+  type ReadResult,
+  type TreeNode,
+  type TreeResult,
+} from './model.js'
+export { contentType, gitChanges, listTree, readTextFile, safePath } from './tree.js'
+
+export const VERSION = '0.1.0'
