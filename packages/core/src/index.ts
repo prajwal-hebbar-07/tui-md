@@ -17,5 +17,3 @@ export {
   type TreeResult,
 } from './model.js'
 export { contentType, gitChanges, listTree, readTextFile, safePath } from './tree.js'
-
-export const VERSION = '0.1.0'

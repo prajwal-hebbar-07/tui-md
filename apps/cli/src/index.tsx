@@ -2,8 +2,11 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { render } from 'ink'
 import React from 'react'
-import { isMermaidFile, linesToAnsi, renderDocument, renderMermaid, VERSION } from '@tui-md/core'
+import { isMermaidFile, linesToAnsi, renderDocument, renderMermaid } from '@tui-md/core'
+import pkg from '../package.json' with { type: 'json' }
 import { App } from './App.js'
+
+const VERSION = pkg.version
 
 function help() {
   console.log(`tui-md ${VERSION}
