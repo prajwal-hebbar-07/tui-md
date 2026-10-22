@@ -4,9 +4,11 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "build": "pnpm --filter @tui-md/core build && pnpm --filter @tui-md/cli build",
+    "build": "pnpm --filter @tui-md/core build && pnpm --filter @tui-md/cli build && pnpm --filter @tui-md/desktop build",
     "test": "pnpm --filter @tui-md/core test",
-    "dev:cli": "pnpm --filter @tui-md/core build && pnpm --filter @tui-md/cli dev"
+    "dev:cli": "pnpm --filter @tui-md/core build && pnpm --filter @tui-md/cli dev",
+    "dev:desktop": "pnpm --filter @tui-md/core build && pnpm --filter @tui-md/desktop dev",
+    "start:desktop": "pnpm --filter @tui-md/core build && pnpm --filter @tui-md/desktop build && pnpm --filter @tui-md/desktop start"
   },
   "engines": {
     "node": ">=20"
