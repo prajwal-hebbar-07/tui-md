@@ -418,6 +418,8 @@ function drawBack(canvas: Canvas, from: Box, to: Box, label: string, rail: numbe
   canvas.hline(yFrom, xFrom, rail)
   canvas.vline(rail, Math.min(yFrom, yTo), Math.max(yFrom, yTo))
   canvas.hline(yTo, xTo + 1, rail)
+  canvas.set(rail, Math.min(yFrom, yTo), '┐')
+  canvas.set(rail, Math.max(yFrom, yTo), '┘')
   canvas.set(xTo, yTo, '◄')
   if (label) canvas.text(rail + 2, yFrom, label)
 }
