@@ -22,7 +22,9 @@ Keys
   tab        switch between the tree and the preview
   enter      expand a folder, or focus the preview
   s          toggle preview and source for markdown
-  /          filter files
+  / ctrl+f   find in the open file
+  n N        next and previous match
+  ctrl+p     filter files
   g G        top and bottom of the preview
   q          quit
 `)
@@ -75,4 +77,10 @@ if (!process.stdout.isTTY) {
 const root = stat.isDirectory() ? target : path.dirname(target)
 const initialFile = stat.isDirectory() ? undefined : path.relative(root, target).split(path.sep).join('/')
 
-render(<App root={root} initialFile={initialFile} />)
+process.stdout.write('\u001b[?1049h')
+try {
+  await render(<App root={root} initialFile={initialFile} />).waitUntilExit()
+} finally {
+  process.stdout.write('\u001b[?1049l')
+}
+console.log('tui-md closed')
