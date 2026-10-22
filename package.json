@@ -8,6 +8,7 @@
     "build": "pnpm --filter @tui-md/core build && pnpm --filter ./apps/cli build && pnpm --filter ./apps/desktop build",
     "test": "pnpm --filter @tui-md/core test",
     "typecheck": "pnpm --filter @tui-md/core build && pnpm --filter ./apps/cli typecheck && pnpm --filter ./apps/desktop typecheck",
+    "dev": "pnpm dev:desktop",
     "dev:cli": "pnpm --filter @tui-md/core build && pnpm --filter ./apps/cli dev",
     "dev:desktop": "pnpm --filter @tui-md/core build && pnpm --filter ./apps/desktop dev",
     "start:desktop": "pnpm --filter @tui-md/core build && pnpm --filter ./apps/desktop build && pnpm --filter ./apps/desktop start",

@@ -45,11 +45,11 @@ Then run `tui-md` in a folder of notes to pick a file, or `tui-md path/to/file.m
 ```bash
 pnpm install
 pnpm test
+pnpm dev
 pnpm dev:cli -- examples
-pnpm dev:desktop
 ```
 
-`pnpm dev:desktop` opens the sample notes. Use **Open Folder** for another directory. In the browser preview at `http://127.0.0.1:5173`, the sample folder is already open.
+`pnpm dev` opens the desktop app on the sample notes. Use **Open Folder** for another directory. In the browser preview at `http://127.0.0.1:5173`, the sample folder is already open.
 
 Print one file without the full-screen UI:
 
