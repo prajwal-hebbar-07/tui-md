@@ -1,4 +1,5 @@
 import { renderFlowchart } from './flowchart.js'
+import { renderSequence } from './sequence.js'
 import { centerText, wrapText } from './text.js'
 
 type Shape = 'rect' | 'round' | 'stadium' | 'diamond' | 'sub' | 'cylinder' | 'circle' | 'hex' | 'odd'
@@ -543,99 +544,6 @@ function fallback(kind: string, src: string, width: number): string[] {
   ]
 }
 
-function renderSequence(src: string, width: number): string[] {
-  const participants: { id: string; label: string }[] = []
-  const known = new Map<string, number>()
-  const ensure = (id: string, label = id) => {
-    if (!known.has(id)) {
-      known.set(id, participants.length)
-      participants.push({ id, label })
-    } else if (label !== id) {
-      participants[known.get(id)!].label = label
-    }
-  }
-  type Step =
-    | { type: 'msg'; from: string; to: string; text: string; style: string }
-    | { type: 'note'; text: string }
-    | { type: 'banner'; text: string }
-  const steps: Step[] = []
-  for (const raw of src.split('\n')) {
-    const line = raw.trim()
-    if (!line || /^sequenceDiagram\b/i.test(line) || line.startsWith('%%') || /^autonumber\b/i.test(line)) continue
-    const actor = /^(?:participant|actor)\s+(\w+)(?:\s+as\s+(.+))?$/i.exec(line)
-    if (actor) {
-      ensure(actor[1], (actor[2] || actor[1]).trim())
-      continue
-    }
-    if (/^(loop|alt|opt|par|critical|break|rect)\b/i.test(line)) {
-      steps.push({ type: 'banner', text: `┌ ${line}` })
-      continue
-    }
-    if (/^else\b/i.test(line)) {
-      steps.push({ type: 'banner', text: `├ ${line}` })
-      continue
-    }
-    if (/^end\b/i.test(line)) {
-      steps.push({ type: 'banner', text: '└' })
-      continue
-    }
-    const note = /^note\s+(?:over|left of|right of)\s+([^:]+):\s*(.*)$/i.exec(line)
-    if (note) {
-      steps.push({ type: 'note', text: note[2].trim() })
-      continue
-    }
-    const msg = /^([A-Za-z0-9_]+)\s*([-.]+(?:>+|x+|\))+)\s*([A-Za-z0-9_]+)\s*:\s*(.*)$/.exec(line)
-    if (msg) {
-      ensure(msg[1])
-      ensure(msg[3])
-      steps.push({ type: 'msg', from: msg[1], to: msg[3], text: msg[4].trim(), style: msg[2] })
-    }
-  }
-  if (!participants.length) return fallback('sequenceDiagram', src, width)
-  const colW = participants.map((item) => Math.max(item.label.length, 6) + 2)
-  const canvas = new Canvas()
-  const xOf: number[] = []
-  let x = 0
-  participants.forEach((item, index) => {
-    xOf[index] = x + Math.floor(colW[index] / 2)
-    canvas.text(x, 0, centerText(item.label, colW[index]).trimEnd())
-    x += colW[index] + 2
-  })
-  const labelX = (xOf[xOf.length - 1] ?? 0) + 4
-  let y = 2
-  const rows: { y: number; step: Step }[] = []
-  for (const step of steps) {
-    rows.push({ y, step })
-    y += step.type === 'msg' && known.get(step.from) === known.get(step.to) ? 3 : 2
-  }
-  for (const cx of xOf) canvas.vline(cx, 1, Math.max(2, y - 1))
-  for (const row of rows) {
-    const step = row.step
-    if (step.type === 'banner' || step.type === 'note') {
-      canvas.text(0, row.y, step.type === 'note' ? `note  ${step.text}` : step.text)
-      continue
-    }
-    const a = xOf[known.get(step.from)!]
-    const b = xOf[known.get(step.to)!]
-    const head = step.style.includes('x') ? 'x' : b < a ? '◄' : '►'
-    if (a === b) {
-      canvas.hline(row.y, a, a + 4)
-      canvas.vline(a + 4, row.y, row.y + 1)
-      canvas.set(a, row.y + 1, '◄')
-      canvas.hline(row.y + 1, a + 1, a + 3)
-      canvas.text(labelX, row.y, step.text)
-      continue
-    }
-    const left = Math.min(a, b)
-    const right = Math.max(a, b)
-    const dashed = step.style.includes('.')
-    canvas.hline(row.y, left, right, dashed ? '┄' : '─')
-    canvas.set(b, row.y, head)
-    canvas.text(labelX, row.y, step.text)
-  }
-  return fit(canvas.toLines(), width)
-}
-
 function block(title: string, rows: string[]): string[] {
   const width = Math.max(title.length, ...rows.map((row) => row.length), 4)
   const line = (left: string, right: string, fill: string) => left + fill.repeat(width + 2) + right
@@ -970,7 +878,7 @@ export function renderMermaid(src: string, width: number): string[] {
       case 'graph':
         return renderFlowchart(body, limit) ?? fallback(kind, body, limit)
       case 'sequencediagram':
-        return renderSequence(body, limit)
+        return renderSequence(body, limit) ?? fallback(kind, body, limit)
       case 'classdiagram':
         return renderClass(body, limit)
       case 'statediagram':

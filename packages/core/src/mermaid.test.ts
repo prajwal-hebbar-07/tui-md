@@ -28,6 +28,23 @@ flowchart LR
     Okta -. "redirect to /auth/callback" .-> SPA
 `
 
+const signIn = `
+sequenceDiagram
+    autonumber
+    actor User
+    participant SPA as React SPA
+    participant BE as Lyik backend
+    User->>SPA: Open a protected page
+    SPA->>SPA: ProtectedRoute check
+    SPA->>+BE: GET /v1/auth/login-url?state=<base64>
+    BE-->>-SPA: { login_url }
+    alt user found
+        Note over SPA,BE: Same JWT an OTP login returns
+    else no user
+        BE-->>SPA: 403
+    end
+`
+
 test('flowchart keeps the decision and routes the return edge', () => {
   const diagram = renderMermaid(flow, 100).join('\n')
   if (process.env.SHOW) console.log(diagram)
@@ -72,6 +89,26 @@ test('flowchart edge operators and grouped nodes', () => {
   assert.match(diagram, /●/)
   assert.match(diagram, /×/)
   assert.match(diagram, /┆/)
+})
+
+test('sequence messages sit above their arrows, between the lifelines', () => {
+  const lines = renderMermaid(signIn, 100)
+  const diagram = lines.join('\n')
+  if (process.env.SHOW) console.log(diagram)
+  assert.match(diagram, /╭─+╮/)
+  assert.match(diagram, /│ User │/)
+  const label = lines.findIndex((line) => line.includes('1. Open a protected page'))
+  assert.ok(label > 0)
+  assert.match(lines[label + 1], /├─+►│/)
+  const userX = lines[label + 1].indexOf('├')
+  assert.ok(lines[label].indexOf('1. Open') > userX, 'label starts right of the sender lifeline')
+  assert.match(diagram, /3\. GET \/v1\/auth\/login-url\?state=<base64>/)
+  assert.match(diagram, /4\. \{ login_url \}/)
+  assert.match(diagram, /◄┄+┤/)
+  assert.match(diagram, /├──╮/)
+  assert.match(diagram, /┌─ alt \[user found\] ─/)
+  assert.match(diagram, /├┄ \[no user\] ┄/)
+  assert.match(diagram, /│ +Same JWT an OTP login returns +│/)
 })
 
 test('sequence, pie, and class diagrams stay readable', () => {
