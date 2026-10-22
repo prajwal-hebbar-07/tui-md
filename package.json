@@ -5,11 +5,13 @@
   "type": "module",
   "license": "MIT",
   "scripts": {
-    "build": "pnpm --filter @tui-md/core build && pnpm --filter ./apps/cli build && pnpm --filter @tui-md/desktop build",
+    "build": "pnpm --filter @tui-md/core build && pnpm --filter ./apps/cli build && pnpm --filter ./apps/desktop build",
     "test": "pnpm --filter @tui-md/core test",
+    "typecheck": "pnpm --filter @tui-md/core build && pnpm --filter ./apps/cli typecheck && pnpm --filter ./apps/desktop typecheck",
     "dev:cli": "pnpm --filter @tui-md/core build && pnpm --filter ./apps/cli dev",
-    "dev:desktop": "pnpm --filter @tui-md/core build && pnpm --filter @tui-md/desktop dev",
-    "start:desktop": "pnpm --filter @tui-md/core build && pnpm --filter @tui-md/desktop build && pnpm --filter @tui-md/desktop start"
+    "dev:desktop": "pnpm --filter @tui-md/core build && pnpm --filter ./apps/desktop dev",
+    "start:desktop": "pnpm --filter @tui-md/core build && pnpm --filter ./apps/desktop build && pnpm --filter ./apps/desktop start",
+    "dist:desktop": "pnpm --filter @tui-md/core build && pnpm --filter ./apps/desktop dist"
   },
   "engines": {
     "node": ">=22"

@@ -6,6 +6,8 @@ dist/
 coverage/
 packages/core/.tmp/
 apps/desktop/dist/
+apps/desktop/release/
+apps/desktop/electron/main.bundle.mjs
 apps/cli/dist/
 apps/cli/README.md
 apps/cli/LICENSE
