@@ -4,7 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "test": "pnpm --filter @tui-md/core test"
+    "build": "pnpm --filter @tui-md/core build && pnpm --filter @tui-md/cli build",
+    "test": "pnpm --filter @tui-md/core test",
+    "dev:cli": "pnpm --filter @tui-md/core build && pnpm --filter @tui-md/cli dev"
   },
   "engines": {
     "node": ">=20"
