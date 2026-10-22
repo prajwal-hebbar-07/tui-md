@@ -84,6 +84,22 @@ button { background: none; border: 0; padding: 0; }
   text-align: left;
   flex: none;
 }
+.side-actions { margin-left: auto; display: flex; gap: 8px; text-transform: none; letter-spacing: 0; }
+.side-actions button:hover { color: white; }
+.draft { padding: 4px 8px; flex: none; }
+.draft input { width: 100%; border: 1px solid #3c3c3c; background: #2a2a2a; border-radius: 4px; padding: 3px 8px; }
+.notice { color: #f14c4c; padding: 2px 12px 6px; flex: none; }
+.ctx {
+  position: fixed;
+  z-index: 30;
+  min-width: 160px;
+  background: #252526;
+  border: 1px solid #454545;
+  border-radius: 4px;
+  padding: 4px 0;
+}
+.ctx button { display: block; width: 100%; text-align: left; padding: 4px 12px; }
+.ctx button:hover { background: var(--selection); }
 .outline { display: flex; flex-direction: column; min-height: 0; }
 .side-scroll, .outline.open { overflow: auto; min-height: 0; }
 .side-scroll { flex: 1; }

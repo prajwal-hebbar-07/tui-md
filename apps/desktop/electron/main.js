@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { app, BrowserWindow, dialog, ipcMain, protocol, shell } from 'electron'
-import { bubbleGit, contentType, gitChanges, listTree, readTextFile, safePath } from '@tui-md/core'
+import { bubbleGit, contentType, createEntry, gitChanges, listTree, readTextFile, removeEntry, renameEntry, safePath } from '@tui-md/core'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const dev = process.argv.includes('--dev')
@@ -28,6 +28,7 @@ function findStartRoot() {
 }
 
 let root = findStartRoot()
+const treeOptions = { keepEmpty: true }
 
 function webPreferences() {
   return {
@@ -84,14 +85,23 @@ app.whenReady().then(() => {
   })
 
   ipcMain.handle('root', () => rootInfo())
-  ipcMain.handle('tree', () => (root ? listTree(root) : { name: '', nodes: [], truncated: false }))
+  ipcMain.handle('tree', () => (root ? listTree(root, treeOptions) : { name: '', nodes: [], truncated: false }))
   ipcMain.handle('git', () => {
     if (!root) return {}
-    const listed = listTree(root)
+    const listed = listTree(root, treeOptions)
     return bubbleGit(listed.nodes, gitChanges(root))
   })
   ipcMain.handle('read', (_event, rel) =>
     root ? readTextFile(root, String(rel || '')) : { ok: false, error: 'No folder open' },
+  )
+  ipcMain.handle('create', (_event, rel, kind) =>
+    root ? createEntry(root, String(rel || ''), kind === 'dir' ? 'dir' : 'file') : { ok: false, error: 'No folder open' },
+  )
+  ipcMain.handle('rename', (_event, from, to) =>
+    root ? renameEntry(root, String(from || ''), String(to || '')) : { ok: false, error: 'No folder open' },
+  )
+  ipcMain.handle('remove', (_event, rel) =>
+    root ? removeEntry(root, String(rel || '')) : { ok: false, error: 'No folder open' },
   )
   ipcMain.handle('open-folder', async () => {
     const parent = BrowserWindow.getFocusedWindow() ?? undefined

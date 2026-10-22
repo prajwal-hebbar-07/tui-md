@@ -18,6 +18,30 @@ import { Tree } from './Tree'
 type Kind = 'markdown' | 'mermaid' | 'text' | 'binary'
 type Palette = 'files' | 'history' | null
 type HistItem = { root: string; path: string }
+type Menu = { x: number; y: number; path: string; kind: 'file' | 'dir' | 'root' }
+type Draft = { mode: 'file' | 'dir'; dir: string } | { mode: 'rename'; path: string; kind: 'file' | 'dir' }
+
+function parentDir(rel: string): string {
+  const slash = rel.lastIndexOf('/')
+  return slash < 0 ? '' : rel.slice(0, slash)
+}
+
+function joinRel(dir: string, name: string): string {
+  return dir ? `${dir}/${name}` : name
+}
+
+function folderName(raw: string): string {
+  const name = raw.trim()
+  if (!name || name === '.' || name === '..' || name.includes('/') || name.includes('\\')) return ''
+  return name
+}
+
+function markdownName(raw: string): string {
+  const name = raw.trim()
+  if (!name || name === '.' || name === '..' || name.includes('/') || name.includes('\\')) return ''
+  const withExt = name.includes('.') ? name : `${name}.md`
+  return isMarkdown(withExt) || isMermaidFile(withExt) ? withExt : ''
+}
 
 function kindOf(name: string, body?: ReadResult): Kind {
   if (body && body.ok && body.binary) return 'binary'
@@ -85,6 +109,10 @@ export function App() {
   const [bodies, setBodies] = useState<Record<string, ReadResult>>({})
   const [mode, setMode] = useState<'preview' | 'source'>('preview')
   const [outlineOpen, setOutlineOpen] = useState(true)
+  const [menu, setMenu] = useState<Menu | null>(null)
+  const [draft, setDraft] = useState<Draft | null>(null)
+  const [draftName, setDraftName] = useState('')
+  const [notice, setNotice] = useState('')
   const [sideW, setSideW] = useState(280)
   const [palette, setPalette] = useState<Palette>(null)
   const [paletteQuery, setPaletteQuery] = useState('')
@@ -265,6 +293,7 @@ export function App() {
     })
     setRootOpen(true)
     setPalette(null)
+    setMenu(null)
     if (!isMarkdown(rel)) setMode('source')
     else setMode('preview')
     if (rootPath) remember(rootPath, rel)
@@ -277,6 +306,99 @@ export function App() {
     setTabs(next)
   }
 
+  function reveal(dir: string) {
+    if (!dir) {
+      setRootOpen(true)
+      return
+    }
+    setExpanded((current) => new Set([...current, dir, ...ancestorDirs(dir)]))
+    setRootOpen(true)
+  }
+
+  function refreshTree() {
+    setGeneration((value) => value + 1)
+  }
+
+  function relocate(from: string, to: string) {
+    const map = (item: string) => (item === from || item.startsWith(`${from}/`) ? `${to}${item.slice(from.length)}` : item)
+    setTabs((current) => current.map(map))
+    setActive((current) => (current ? map(current) : current))
+    setBodies((current) => {
+      const next: Record<string, ReadResult> = {}
+      for (const [key, value] of Object.entries(current)) next[map(key)] = value
+      return next
+    })
+  }
+
+  function startDraft(next: Draft, name = '') {
+    setMenu(null)
+    setNotice('')
+    setDraft(next)
+    setDraftName(name)
+    if (next.mode !== 'rename') reveal(next.dir)
+  }
+
+  async function commitDraft() {
+    if (!draft) return
+    if (draft.mode === 'rename') {
+      const name = draft.kind === 'dir' ? folderName(draftName) : markdownName(draftName)
+      if (!name) {
+        setNotice(draft.kind === 'dir' ? 'Enter a folder name.' : 'Use a .md or .mmd name.')
+        return
+      }
+      const to = joinRel(parentDir(draft.path), name)
+      if (to === draft.path) {
+        setDraft(null)
+        return
+      }
+      const result = await api().rename(draft.path, to)
+      if (!result.ok) {
+        setNotice(result.error)
+        return
+      }
+      relocate(draft.path, to)
+      reveal(parentDir(to))
+      setDraft(null)
+      refreshTree()
+      return
+    }
+    const name = draft.mode === 'dir' ? folderName(draftName) : markdownName(draftName)
+    if (!name) {
+      setNotice(draft.mode === 'dir' ? 'Enter a folder name.' : 'Use a .md or .mmd name.')
+      return
+    }
+    const rel = joinRel(draft.dir, name)
+    const result = await api().create(rel, draft.mode === 'dir' ? 'dir' : 'file')
+    if (!result.ok) {
+      setNotice(result.error)
+      return
+    }
+    reveal(draft.mode === 'dir' ? rel : draft.dir)
+    setDraft(null)
+    refreshTree()
+    if (draft.mode === 'file') openFile(rel)
+  }
+
+  async function destroy(rel: string, kind: 'file' | 'dir') {
+    setMenu(null)
+    const label = rel.split('/').pop() || rel
+    const question = kind === 'dir' ? `Delete folder “${label}” and everything inside it?` : `Delete ${label}?`
+    if (!window.confirm(question)) return
+    const result = await api().remove(rel)
+    if (!result.ok) {
+      setNotice(result.error)
+      return
+    }
+    setNotice('')
+    const next = tabs.filter((item) => item !== rel && !item.startsWith(`${rel}/`))
+    if (active && (active === rel || active.startsWith(`${rel}/`))) {
+      const index = tabs.indexOf(active)
+      setActive(next[index] ?? next[index - 1] ?? null)
+    }
+    setTabs(next)
+    refreshTree()
+  }
+
   async function chooseFolder() {
     const next = await api().openFolder()
     if (!next) return
@@ -287,8 +409,18 @@ export function App() {
     setActive(null)
     setBodies({})
     setExpanded(new Set())
+    setDraft(null)
+    setMenu(null)
+    setNotice('')
     setGeneration((value) => value + 1)
   }
+
+  useEffect(() => {
+    if (!menu) return
+    const close = () => setMenu(null)
+    window.addEventListener('mousedown', close)
+    return () => window.removeEventListener('mousedown', close)
+  }, [menu])
 
   function startResize(event: ReactMouse) {
     event.preventDefault()
@@ -340,10 +472,51 @@ export function App() {
       </header>
       <div className="body">
         <aside className="sidebar" style={{ width: sideW }}>
-          <div className="side-title">Explorer</div>
+          <div className="side-title">
+            <span>Explorer</span>
+            <span className="side-actions">
+              <button type="button" onClick={() => startDraft({ mode: 'file', dir: active ? parentDir(active) : '' })}>
+                New File
+              </button>
+              <button type="button" onClick={() => startDraft({ mode: 'dir', dir: active ? parentDir(active) : '' })}>
+                New Folder
+              </button>
+            </span>
+          </div>
+          {draft ? (
+            <form
+              className="draft"
+              onSubmit={(event) => {
+                event.preventDefault()
+                void commitDraft()
+              }}
+            >
+              <input
+                autoFocus
+                value={draftName}
+                placeholder={draft.mode === 'dir' ? 'Folder name' : draft.mode === 'rename' ? 'New name' : 'File name'}
+                onChange={(event) => setDraftName(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Escape') {
+                    event.stopPropagation()
+                    setDraft(null)
+                  }
+                }}
+              />
+            </form>
+          ) : null}
+          {notice ? <div className="notice">{notice}</div> : null}
           <div className="side-scroll">
             {hasRoot ? (
-              <div className="tree-row root-row" style={{ paddingLeft: 8 }} onClick={() => setRootOpen((value) => !value)}>
+              <div
+                className="tree-row root-row"
+                style={{ paddingLeft: 8 }}
+                onClick={() => setRootOpen((value) => !value)}
+                onContextMenu={(event) => {
+                  event.preventDefault()
+                  setMenu({ x: event.clientX, y: event.clientY, path: '', kind: 'root' })
+                }}
+              >
                 <Chevron open={rootOpen} />
                 <FolderIcon open={rootOpen} />
                 <span className="name">{rootName}</span>
@@ -367,6 +540,7 @@ export function App() {
                   })
                 }
                 onOpen={openFile}
+                onMenu={(node, x, y) => setMenu({ x, y, path: node.path, kind: node.kind })}
               />
             ) : null}
             {tree.truncated ? <div className="more">More files were not shown</div> : null}
@@ -507,6 +681,34 @@ export function App() {
               ))}
             </div>
           </div>
+        </div>
+      ) : null}
+      {menu ? (
+        <div className="ctx" style={{ left: menu.x, top: menu.y }} onMouseDown={(event) => event.stopPropagation()}>
+          <button type="button" onClick={() => startDraft({ mode: 'file', dir: menu.kind === 'dir' ? menu.path : parentDir(menu.path) })}>
+            New File
+          </button>
+          <button type="button" onClick={() => startDraft({ mode: 'dir', dir: menu.kind === 'dir' ? menu.path : parentDir(menu.path) })}>
+            New Folder
+          </button>
+          {menu.kind !== 'root' ? (
+            <button
+              type="button"
+              onClick={() =>
+                startDraft(
+                  { mode: 'rename', path: menu.path, kind: menu.kind === 'dir' ? 'dir' : 'file' },
+                  menu.path.split('/').pop() || '',
+                )
+              }
+            >
+              Rename
+            </button>
+          ) : null}
+          {menu.kind !== 'root' ? (
+            <button type="button" onClick={() => void destroy(menu.path, menu.kind === 'dir' ? 'dir' : 'file')}>
+              Delete
+            </button>
+          ) : null}
         </div>
       ) : null}
     </div>

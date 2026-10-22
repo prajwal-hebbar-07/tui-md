@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 import react from '@vitejs/plugin-react'
 import { defineConfig, type Plugin } from 'vite'
 import { bubbleGit } from '../../packages/core/src/model.ts'
-import { contentType, gitChanges, listTree, readTextFile, safePath } from '../../packages/core/src/tree.ts'
+import { contentType, createEntry, gitChanges, listTree, readTextFile, removeEntry, renameEntry, safePath } from '../../packages/core/src/tree.ts'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 
@@ -35,16 +35,28 @@ function fileApi(): Plugin {
           return
         }
         if (url.pathname === '/api/tree') {
-          send(listTree(root))
+          send(listTree(root, { keepEmpty: true }))
           return
         }
         if (url.pathname === '/api/git') {
-          const listed = listTree(root)
+          const listed = listTree(root, { keepEmpty: true })
           send(bubbleGit(listed.nodes, gitChanges(root)))
           return
         }
         if (url.pathname === '/api/file') {
           send(readTextFile(root, url.searchParams.get('path') || ''))
+          return
+        }
+        if (req.method === 'POST' && url.pathname === '/api/create') {
+          send(createEntry(root, url.searchParams.get('path') || '', url.searchParams.get('kind') === 'dir' ? 'dir' : 'file'))
+          return
+        }
+        if (req.method === 'POST' && url.pathname === '/api/rename') {
+          send(renameEntry(root, url.searchParams.get('from') || '', url.searchParams.get('to') || ''))
+          return
+        }
+        if (req.method === 'POST' && url.pathname === '/api/remove') {
+          send(removeEntry(root, url.searchParams.get('path') || ''))
           return
         }
         if (url.pathname === '/api/asset') {

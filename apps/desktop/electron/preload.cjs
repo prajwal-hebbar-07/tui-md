@@ -7,4 +7,7 @@ contextBridge.exposeInMainWorld('tuiMd', {
   git: () => ipcRenderer.invoke('git'),
   read: (rel) => ipcRenderer.invoke('read', rel),
   openFolder: () => ipcRenderer.invoke('open-folder'),
+  create: (rel, kind) => ipcRenderer.invoke('create', rel, kind),
+  rename: (from, to) => ipcRenderer.invoke('rename', from, to),
+  remove: (rel) => ipcRenderer.invoke('remove', rel),
 })

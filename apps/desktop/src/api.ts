@@ -2,6 +2,8 @@ import type { ReadResult, TreeResult } from '@tui-md/core'
 
 export type RootInfo = { name: string; path: string }
 
+export type FsResult = { ok: true } | { ok: false; error: string }
+
 export type Api = {
   platform: string
   getRoot: () => Promise<RootInfo | null>
@@ -9,6 +11,14 @@ export type Api = {
   git: () => Promise<Record<string, string>>
   read: (rel: string) => Promise<ReadResult>
   openFolder: () => Promise<RootInfo | null>
+  create: (rel: string, kind: 'file' | 'dir') => Promise<FsResult>
+  rename: (from: string, to: string) => Promise<FsResult>
+  remove: (rel: string) => Promise<FsResult>
+}
+
+async function post(url: string): Promise<FsResult> {
+  const response = await fetch(url, { method: 'POST' })
+  return response.json() as Promise<FsResult>
 }
 
 async function getJson<T>(url: string): Promise<T> {
@@ -25,6 +35,9 @@ function browserApi(): Api {
     git: () => getJson('/api/git'),
     read: (rel) => getJson(`/api/file?path=${encodeURIComponent(rel)}`),
     openFolder: async () => null,
+    create: (rel, kind) => post(`/api/create?path=${encodeURIComponent(rel)}&kind=${kind}`),
+    rename: (from, to) => post(`/api/rename?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
+    remove: (rel) => post(`/api/remove?path=${encodeURIComponent(rel)}`),
   }
 }
 
