@@ -2,7 +2,7 @@
 
 type TuiApi = {
   platform: string
-  getRoot: () => Promise<{ name: string; path: string }>
+  getRoot: () => Promise<{ name: string; path: string } | null>
   list: () => Promise<import('@tui-md/core').TreeResult>
   git: () => Promise<Record<string, string>>
   read: (rel: string) => Promise<import('@tui-md/core').ReadResult>

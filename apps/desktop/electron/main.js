@@ -17,6 +17,7 @@ protocol.registerSchemesAsPrivileged([
 function findStartRoot() {
   const args = process.argv.slice(2).filter((arg) => arg !== '--dev' && !arg.startsWith('-') && fs.existsSync(arg))
   if (args[0]) return path.resolve(args[0])
+  if (app.isPackaged) return null
   let dir = process.cwd()
   for (let i = 0; i < 5; i++) {
     const candidate = path.join(dir, 'examples')
@@ -29,6 +30,7 @@ function findStartRoot() {
 let root = findStartRoot()
 
 function rootInfo() {
+  if (!root) return null
   return { name: path.basename(root) || root, path: root }
 }
 
@@ -67,19 +69,22 @@ function createWindow() {
 app.whenReady().then(() => {
   protocol.handle('tumd-asset', (request) => {
     const rel = new URL(request.url).searchParams.get('path') || ''
-    const abs = safePath(root, rel)
+    const abs = root ? safePath(root, rel) : null
     if (!abs || !fs.existsSync(abs)) return new Response('Not found', { status: 404 })
     const body = fs.readFileSync(abs)
     return new Response(body, { headers: { 'content-type': contentType(abs) } })
   })
 
   ipcMain.handle('root', () => rootInfo())
-  ipcMain.handle('tree', () => listTree(root))
+  ipcMain.handle('tree', () => (root ? listTree(root) : { name: '', nodes: [], truncated: false }))
   ipcMain.handle('git', () => {
+    if (!root) return {}
     const listed = listTree(root)
     return bubbleGit(listed.nodes, gitChanges(root))
   })
-  ipcMain.handle('read', (_event, rel) => readTextFile(root, String(rel || '')))
+  ipcMain.handle('read', (_event, rel) =>
+    root ? readTextFile(root, String(rel || '')) : { ok: false, error: 'No folder open' },
+  )
   ipcMain.handle('open-folder', async () => {
     const parent = BrowserWindow.getFocusedWindow() ?? undefined
     const result = await dialog.showOpenDialog(parent, { properties: ['openDirectory'] })

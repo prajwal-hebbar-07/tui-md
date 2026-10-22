@@ -29,6 +29,7 @@ export function App() {
   const desktop = typeof window !== 'undefined' && Boolean(window.tuiMd)
   const platform = window.tuiMd?.platform || (navigator.platform.startsWith('Mac') ? 'darwin' : 'other')
   const [rootName, setRootName] = useState('Folder')
+  const [hasRoot, setHasRoot] = useState(true)
   const [tree, setTree] = useState<TreeResult>({ name: '', nodes: [], truncated: false })
   const [git, setGit] = useState<Record<string, string>>({})
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
@@ -55,7 +56,8 @@ export function App() {
       const listed = await client.list()
       const changes = await client.git()
       if (cancel) return
-      setRootName(info.name)
+      setHasRoot(Boolean(info))
+      setRootName(info?.name ?? 'No folder open')
       setTree(listed)
       setGit(changes)
       if (ready.current) return
@@ -248,12 +250,16 @@ export function App() {
           ) : (
             <>
               <div className="side-scroll">
-                <div className="tree-row root-row" style={{ paddingLeft: 8 }} onClick={() => setRootOpen((value) => !value)}>
-                  <Chevron open={rootOpen} />
-                  <FolderIcon open={rootOpen} />
-                  <span className="name">{rootName}</span>
-                </div>
-                {rootOpen ? (
+                {hasRoot ? (
+                  <div className="tree-row root-row" style={{ paddingLeft: 8 }} onClick={() => setRootOpen((value) => !value)}>
+                    <Chevron open={rootOpen} />
+                    <FolderIcon open={rootOpen} />
+                    <span className="name">{rootName}</span>
+                  </div>
+                ) : (
+                  <div className="more">No folder open</div>
+                )}
+                {hasRoot && rootOpen ? (
                   <Tree
                     nodes={tree.nodes}
                     depth={1}
@@ -340,6 +346,11 @@ export function App() {
               <div className="empty">
                 <h1>tui-md</h1>
                 <p>Open a folder of markdown to preview it, including Mermaid diagrams.</p>
+                {desktop && !hasRoot ? (
+                  <button type="button" className="open-folder" onClick={() => void chooseFolder()}>
+                    Open Folder
+                  </button>
+                ) : null}
               </div>
             )}
           </div>

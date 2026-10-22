@@ -4,7 +4,7 @@ export type RootInfo = { name: string; path: string }
 
 export type Api = {
   platform: string
-  getRoot: () => Promise<RootInfo>
+  getRoot: () => Promise<RootInfo | null>
   list: () => Promise<TreeResult>
   git: () => Promise<Record<string, string>>
   read: (rel: string) => Promise<ReadResult>
