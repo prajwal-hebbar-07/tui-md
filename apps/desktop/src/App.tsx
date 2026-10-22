@@ -11,12 +11,14 @@ import {
 } from '@tui-md/core'
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouse } from 'react'
 import { api } from './api'
-import { Chevron, FileIcon, FilesIcon, FolderIcon, SearchIcon } from './icons'
+import { Chevron, FileIcon, FolderIcon } from './icons'
 import { Preview } from './Preview'
 import { Tree } from './Tree'
 
-type Tab = { path: string }
 type Kind = 'markdown' | 'mermaid' | 'text' | 'binary'
+type Side = 'toc' | 'files' | 'closed'
+type Palette = 'files' | 'history' | null
+type HistItem = { root: string; path: string }
 
 function kindOf(name: string, body?: ReadResult): Kind {
   if (body && body.ok && body.binary) return 'binary'
@@ -25,28 +27,74 @@ function kindOf(name: string, body?: ReadResult): Kind {
   return 'text'
 }
 
+function loadHistory(root: string): string[] {
+  try {
+    const all = JSON.parse(localStorage.getItem('tui-md-history') || '[]') as HistItem[]
+    return all.filter((item) => item.root === root).map((item) => item.path)
+  } catch {
+    return []
+  }
+}
+
+function remember(root: string, rel: string) {
+  try {
+    const all = JSON.parse(localStorage.getItem('tui-md-history') || '[]') as HistItem[]
+    const next = [{ root, path: rel }, ...all.filter((item) => !(item.root === root && item.path === rel))].slice(0, 30)
+    localStorage.setItem('tui-md-history', JSON.stringify(next))
+  } catch {
+    /* storage can be blocked */
+  }
+}
+
+function fuzzy(paths: string[], query: string): string[] {
+  const needle = query.trim().toLowerCase()
+  const ranked = needle
+    ? paths.flatMap((item) => {
+        const hay = item.toLowerCase()
+        let at = 0
+        let score = 0
+        for (const ch of needle) {
+          const found = hay.indexOf(ch, at)
+          if (found < 0) return []
+          score += found - at
+          at = found + 1
+        }
+        return [{ item, score }]
+      })
+    : paths.map((item) => ({ item, score: 0 }))
+  ranked.sort((a, b) => a.score - b.score || a.item.length - b.item.length)
+  return ranked.slice(0, 40).map((item) => item.item)
+}
+
+function jumpTo(id: string) {
+  document.getElementById(id)?.scrollIntoView({ block: 'start' })
+}
+
 export function App() {
   const desktop = typeof window !== 'undefined' && Boolean(window.tuiMd)
   const platform = window.tuiMd?.platform || (navigator.platform.startsWith('Mac') ? 'darwin' : 'other')
+  const modLabel = platform === 'darwin' ? '⌘' : 'Ctrl+'
   const [rootName, setRootName] = useState('Folder')
+  const [rootPath, setRootPath] = useState('')
   const [hasRoot, setHasRoot] = useState(true)
   const [tree, setTree] = useState<TreeResult>({ name: '', nodes: [], truncated: false })
   const [git, setGit] = useState<Record<string, string>>({})
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [rootOpen, setRootOpen] = useState(true)
-  const [tabs, setTabs] = useState<Tab[]>([])
   const [active, setActive] = useState<string | null>(null)
   const [bodies, setBodies] = useState<Record<string, ReadResult>>({})
   const [mode, setMode] = useState<'preview' | 'source'>('preview')
-  const [activity, setActivity] = useState<'files' | 'search'>('files')
-  const [query, setQuery] = useState('')
+  const [side, setSide] = useState<Side>('toc')
   const [sideW, setSideW] = useState(280)
-  const [outlineOpen, setOutlineOpen] = useState(false)
-  const [quick, setQuick] = useState(false)
-  const [quickQuery, setQuickQuery] = useState('')
-  const [quickIndex, setQuickIndex] = useState(0)
+  const [palette, setPalette] = useState<Palette>(null)
+  const [paletteQuery, setPaletteQuery] = useState('')
+  const [paletteIndex, setPaletteIndex] = useState(0)
+  const [findOpen, setFindOpen] = useState(false)
+  const [findText, setFindText] = useState('')
+  const [currentHeading, setCurrentHeading] = useState('')
   const [generation, setGeneration] = useState(0)
   const ready = useRef(false)
+  const viewport = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     let cancel = false
@@ -58,6 +106,7 @@ export function App() {
       if (cancel) return
       setHasRoot(Boolean(info))
       setRootName(info?.name ?? 'No folder open')
+      setRootPath(info?.path ?? '')
       setTree(listed)
       setGit(changes)
       if (ready.current) return
@@ -65,9 +114,10 @@ export function App() {
       const first = firstMarkdown(listed.nodes)
       setExpanded(new Set([...defaultExpanded(listed.nodes), ...(first ? ancestorDirs(first) : [])]))
       if (first) {
-        setTabs([{ path: first }])
         setActive(first)
-      }
+        setSide('toc')
+        if (info?.path) remember(info.path, first)
+      } else setSide('files')
     })().catch((error: unknown) => {
       if (!cancel) setRootName(error instanceof Error ? error.message : 'Unable to open folder')
     })
@@ -79,58 +129,39 @@ export function App() {
   useEffect(() => {
     if (!active) return
     let cancel = false
-    api()
-      .read(active)
-      .then((result) => {
-        if (!cancel) setBodies((current) => ({ ...current, [active]: result }))
-      })
-      .catch(() => {
-        if (!cancel) setBodies((current) => ({ ...current, [active]: { ok: false, error: 'Unable to read file' } }))
-      })
+    const pull = () => {
+      api()
+        .read(active)
+        .then((result) => {
+          if (cancel) return
+          setBodies((current) => {
+            const prev = current[active]
+            if (prev && prev.ok && result.ok && prev.text === result.text && prev.binary === result.binary) return current
+            return { ...current, [active]: result }
+          })
+        })
+        .catch(() => {
+          if (!cancel) setBodies((current) => ({ ...current, [active]: { ok: false, error: 'Unable to read file' } }))
+        })
+    }
+    pull()
+    const timer = window.setInterval(pull, 1500)
     return () => {
       cancel = true
+      window.clearInterval(timer)
     }
   }, [active, generation])
 
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      const mod = event.metaKey || event.ctrlKey
-      if (mod && event.key.toLowerCase() === 'p') {
-        event.preventDefault()
-        setQuick(true)
-        setQuickQuery('')
-        setQuickIndex(0)
-      } else if (mod && event.key.toLowerCase() === 'o' && desktop) {
-        event.preventDefault()
-        void chooseFolder()
-      } else if (event.key === 'Escape') setQuick(false)
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [desktop])
-
-  useEffect(() => {
-    const onFocus = () => setGeneration((value) => value + 1)
-    window.addEventListener('focus', onFocus)
-    return () => window.removeEventListener('focus', onFocus)
-  }, [])
-
-  const files = useMemo(() => flattenFiles(tree.nodes), [tree.nodes])
-  const filtered = useMemo(() => {
-    const needle = query.trim().toLowerCase()
-    if (!needle) return files
-    return files.filter((file) => file.path.toLowerCase().includes(needle))
-  }, [files, query])
-  const quickFiles = useMemo(() => {
-    const needle = quickQuery.trim().toLowerCase()
-    const list = needle ? files.filter((file) => file.path.toLowerCase().includes(needle)) : files
-    return list.slice(0, 40)
-  }, [files, quickQuery])
+  const files = useMemo(() => flattenFiles(tree.nodes).map((file) => file.path), [tree.nodes])
+  const history = useMemo(() => (rootPath ? loadHistory(rootPath).filter((item) => files.includes(item)) : []), [rootPath, files, palette])
+  const paletteRows = useMemo(
+    () => fuzzy(palette === 'history' ? history : files, paletteQuery),
+    [palette, history, files, paletteQuery],
+  )
 
   const body = active ? bodies[active] : undefined
   const kind = active ? kindOf(active, body) : 'text'
-  const outline =
-    active && body && body.ok && !body.binary && isMarkdown(active) ? markdownOutline(body.text) : []
+  const outline = active && body && body.ok && !body.binary && isMarkdown(active) ? markdownOutline(body.text) : []
   const fileName = active ? active.split('/').pop() || active : rootName
   const crumb = active ? active.split('/') : []
   const eol = body && body.ok && body.eol === 'CRLF' ? 'CRLF' : 'LF'
@@ -140,8 +171,92 @@ export function App() {
     document.title = active ? `${fileName} — ${rootName}` : rootName
   }, [active, fileName, rootName])
 
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target
+      const typing = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement
+      const mod = event.metaKey || event.ctrlKey
+      if (mod && event.key.toLowerCase() === 'p' && !event.shiftKey) {
+        event.preventDefault()
+        setPalette('files')
+        setPaletteQuery('')
+        setPaletteIndex(0)
+        return
+      }
+      if (mod && event.key.toLowerCase() === 'o' && desktop) {
+        event.preventDefault()
+        void chooseFolder()
+        return
+      }
+      if (typing) return
+      if (event.key === 'Escape') {
+        setPalette(null)
+        setFindOpen(false)
+        return
+      }
+      if (event.key === 't') setSide((value) => (value === 'toc' ? 'closed' : 'toc'))
+      else if (event.key === 'p' || event.key === 'P') setSide('files')
+      else if (event.key === 'H') {
+        setPalette('history')
+        setPaletteQuery('')
+        setPaletteIndex(0)
+      } else if (event.key === '/' || (mod && event.key.toLowerCase() === 'f')) {
+        event.preventDefault()
+        setFindOpen(true)
+      } else if (event.key === 's' && kind === 'markdown') setMode((value) => (value === 'preview' ? 'source' : 'preview'))
+      else if (event.key === 'n' || event.key === 'N') runFind(event.key === 'N')
+      else if (event.key >= '1' && event.key <= '9') {
+        const heading = outline[Number(event.key) - 1]
+        if (heading) {
+          setMode('preview')
+          window.setTimeout(() => jumpTo(heading.id), 0)
+        }
+      } else if (event.key === 'J' || event.key === 'K') {
+        const found = outline.findIndex((heading) => heading.id === currentHeading)
+        const at = found < 0 ? -1 : found
+        const nextIndex = event.key === 'J' ? Math.min(outline.length - 1, at + 1) : Math.max(0, at - 1)
+        const next = outline[nextIndex]
+        if (next) {
+          setMode('preview')
+          window.setTimeout(() => jumpTo(next.id), 0)
+        }
+      } else if (viewport.current && (event.key === 'j' || event.key === 'ArrowDown')) {
+        event.preventDefault()
+        viewport.current.scrollBy({ top: 48 })
+      } else if (viewport.current && (event.key === 'k' || event.key === 'ArrowUp')) {
+        event.preventDefault()
+        viewport.current.scrollBy({ top: -48 })
+      } else if (viewport.current && (event.key === 'd' || event.key === 'PageDown')) {
+        event.preventDefault()
+        viewport.current.scrollBy({ top: viewport.current.clientHeight - 48 })
+      } else if (viewport.current && (event.key === 'u' || event.key === 'PageUp')) {
+        event.preventDefault()
+        viewport.current.scrollBy({ top: -(viewport.current.clientHeight - 48) })
+      } else if (viewport.current && event.key === 'g') viewport.current.scrollTop = 0
+      else if (viewport.current && event.key === 'G') viewport.current.scrollTop = viewport.current.scrollHeight
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [currentHeading, desktop, findText, kind, outline])
+
+  function trackHeading() {
+    const root = viewport.current
+    if (!root) return
+    const edge = root.getBoundingClientRect().top + 16
+    let current = ''
+    for (const el of root.querySelectorAll<HTMLElement>('[id^="h-"]')) {
+      if (el.getBoundingClientRect().top <= edge) current = el.id
+    }
+    setCurrentHeading(current)
+  }
+
+  function runFind(backwards: boolean) {
+    const finder = (window as Window & { find?: (text: string, caseSensitive?: boolean, backwards?: boolean, wrap?: boolean) => boolean }).find
+    if (!findText || !finder) return
+    finder(findText, false, backwards, true)
+  }
+
   function openFile(rel: string) {
-    setTabs((current) => (current.some((tab) => tab.path === rel) ? current : [...current, { path: rel }]))
     setActive(rel)
     setExpanded((current) => {
       const next = new Set(current)
@@ -149,17 +264,11 @@ export function App() {
       return next
     })
     setRootOpen(true)
-    setQuick(false)
+    setSide('toc')
+    setPalette(null)
     if (!isMarkdown(rel)) setMode('source')
     else setMode('preview')
-  }
-
-  function closeTab(rel: string) {
-    setTabs((current) => {
-      const next = current.filter((tab) => tab.path !== rel)
-      if (active === rel) setActive(next[next.length - 1]?.path ?? null)
-      return next
-    })
+    if (rootPath) remember(rootPath, rel)
   }
 
   async function chooseFolder() {
@@ -167,10 +276,11 @@ export function App() {
     if (!next) return
     ready.current = false
     setRootName(next.name)
-    setTabs([])
+    setRootPath(next.path)
     setActive(null)
     setBodies({})
     setExpanded(new Set())
+    setSide('toc')
     setGeneration((value) => value + 1)
   }
 
@@ -192,6 +302,22 @@ export function App() {
       <header className="titlebar">
         <span className="title">{active ? `${fileName} — ${rootName}` : rootName}</span>
         <div className="title-actions">
+          <button type="button" className={side === 'files' ? 'on' : ''} onClick={() => setSide('files')}>
+            Files
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setPalette('history')
+              setPaletteQuery('')
+              setPaletteIndex(0)
+            }}
+          >
+            Recent
+          </button>
+          <button type="button" className={side === 'toc' ? 'on' : ''} onClick={() => setSide((value) => (value === 'toc' ? 'closed' : 'toc'))}>
+            Outline
+          </button>
           {desktop ? (
             <button type="button" onClick={() => void chooseFolder()}>
               Open Folder
@@ -210,45 +336,10 @@ export function App() {
         </div>
       </header>
       <div className="body">
-        <nav className="activity">
-          <button
-            type="button"
-            className={activity === 'files' ? 'active' : ''}
-            aria-label="Explorer"
-            onClick={() => setActivity('files')}
-          >
-            <FilesIcon />
-          </button>
-          <button
-            type="button"
-            className={activity === 'search' ? 'active' : ''}
-            aria-label="Search"
-            onClick={() => setActivity('search')}
-          >
-            <SearchIcon />
-          </button>
-        </nav>
-        <aside className="sidebar" style={{ width: sideW }}>
-          <div className="side-title">{activity === 'files' ? 'Explorer' : 'Search'}</div>
-          {activity === 'search' ? (
-            <div className="search-pane">
-              <input
-                value={query}
-                autoFocus
-                placeholder="Filter files"
-                onChange={(event) => setQuery(event.target.value)}
-              />
-              <div className="side-scroll">
-                {filtered.map((file) => (
-                  <button key={file.path} type="button" className="search-hit" onClick={() => openFile(file.path)}>
-                    <FileIcon name={file.name} />
-                    <span>{file.path}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <>
+        {side !== 'closed' ? (
+          <aside className="sidebar" style={{ width: sideW }}>
+            <div className="side-title">{side === 'files' ? 'Explorer' : 'Outline'}</div>
+            {side === 'files' ? (
               <div className="side-scroll">
                 {hasRoot ? (
                   <div className="tree-row root-row" style={{ paddingLeft: 8 }} onClick={() => setRootOpen((value) => !value)}>
@@ -279,55 +370,36 @@ export function App() {
                 ) : null}
                 {tree.truncated ? <div className="more">More files were not shown</div> : null}
               </div>
-              <section className={outlineOpen ? 'outline open' : 'outline'}>
-                <button type="button" className="side-title" onClick={() => setOutlineOpen((value) => !value)}>
-                  Outline
-                </button>
-                {outlineOpen
-                  ? outline.map((heading) => (
-                      <button
-                        key={heading.id}
-                        type="button"
-                        className="outline-row"
-                        style={{ paddingLeft: 8 + (heading.depth - 1) * 12 }}
-                        onClick={() => document.getElementById(heading.id)?.scrollIntoView({ block: 'start' })}
-                      >
-                        {heading.text}
-                      </button>
-                    ))
-                  : null}
-                {outlineOpen && outline.length === 0 ? <div className="more">No headings</div> : null}
-              </section>
-            </>
-          )}
-        </aside>
-        <div className="sash" onMouseDown={startResize} />
+            ) : (
+              <div className="side-scroll">
+                {outline.map((heading) => (
+                  <button
+                    key={heading.id}
+                    type="button"
+                    className={heading.id === currentHeading ? 'outline-row active' : 'outline-row'}
+                    style={{ paddingLeft: 8 + (heading.depth - 1) * 12 }}
+                    onClick={() => {
+                      setMode('preview')
+                      window.setTimeout(() => jumpTo(heading.id), 0)
+                    }}
+                  >
+                    {heading.text}
+                  </button>
+                ))}
+                {outline.length === 0 ? <div className="more">No headings</div> : null}
+              </div>
+            )}
+          </aside>
+        ) : null}
+        {side !== 'closed' ? <div className="sash" onMouseDown={startResize} /> : null}
         <main className="editor">
           <div className="tabs">
-            {tabs.map((tab) => (
-              <div
-                key={tab.path}
-                className={tab.path === active ? 'tab active' : 'tab'}
-                onClick={() => setActive(tab.path)}
-                onAuxClick={(event) => {
-                  if (event.button === 1) closeTab(tab.path)
-                }}
-              >
-                <FileIcon name={tab.path} />
-                <span>{tab.path.split('/').pop()}</span>
-                <button
-                  type="button"
-                  className="tab-close"
-                  aria-label="Close"
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    closeTab(tab.path)
-                  }}
-                >
-                  ×
-                </button>
+            {active ? (
+              <div className="tab active">
+                <FileIcon name={active} />
+                <span>{fileName}</span>
               </div>
-            ))}
+            ) : null}
           </div>
           <div className="crumb">
             <span>{rootName}</span>
@@ -339,13 +411,30 @@ export function App() {
             ))}
             <span className="crumb-mode">{mode === 'preview' && kind !== 'text' ? 'Markdown Preview' : 'Source'}</span>
           </div>
-          <div className="viewport">
+          {findOpen ? (
+            <div className="find-bar">
+              <input
+                autoFocus
+                placeholder="Find"
+                value={findText}
+                onChange={(event) => setFindText(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault()
+                    runFind(event.shiftKey)
+                    ;(event.target as HTMLInputElement).blur()
+                  } else if (event.key === 'Escape') setFindOpen(false)
+                }}
+              />
+            </div>
+          ) : null}
+          <div className="viewport" ref={viewport} onScroll={trackHeading}>
             {active ? (
               <Preview file={active} body={body} mode={kind === 'markdown' ? mode : kind === 'mermaid' ? 'preview' : 'source'} kind={kind} />
             ) : (
               <div className="empty">
                 <h1>tui-md</h1>
-                <p>Open a folder of markdown to preview it, including Mermaid diagrams.</p>
+                <p>Open a markdown file from the outline, the file list, or {modLabel}P.</p>
                 {desktop && !hasRoot ? (
                   <button type="button" className="open-folder" onClick={() => void chooseFolder()}>
                     Open Folder
@@ -360,6 +449,9 @@ export function App() {
         <div>
           <span>{rootName}</span>
           <span>{active || 'No file open'}</span>
+          <span>
+            t outline {modLabel}P files H recent / find
+          </span>
         </div>
         <div>
           <span>{eol}</span>
@@ -367,39 +459,39 @@ export function App() {
           <span>{language}</span>
         </div>
       </footer>
-      {quick ? (
-        <div className="palette" onMouseDown={() => setQuick(false)}>
+      {palette ? (
+        <div className="palette" onMouseDown={() => setPalette(null)}>
           <div className="palette-card" onMouseDown={(event) => event.stopPropagation()}>
             <input
               autoFocus
-              placeholder="Search files by name"
-              value={quickQuery}
+              placeholder={palette === 'history' ? 'Recent files' : 'Search files by name'}
+              value={paletteQuery}
               onChange={(event) => {
-                setQuickQuery(event.target.value)
-                setQuickIndex(0)
+                setPaletteQuery(event.target.value)
+                setPaletteIndex(0)
               }}
               onKeyDown={(event) => {
                 if (event.key === 'ArrowDown') {
                   event.preventDefault()
-                  setQuickIndex((index) => Math.min(quickFiles.length - 1, index + 1))
+                  setPaletteIndex((index) => Math.min(paletteRows.length - 1, index + 1))
                 } else if (event.key === 'ArrowUp') {
                   event.preventDefault()
-                  setQuickIndex((index) => Math.max(0, index - 1))
-                } else if (event.key === 'Enter' && quickFiles[quickIndex]) openFile(quickFiles[quickIndex].path)
-                else if (event.key === 'Escape') setQuick(false)
+                  setPaletteIndex((index) => Math.max(0, index - 1))
+                } else if (event.key === 'Enter' && paletteRows[paletteIndex]) openFile(paletteRows[paletteIndex])
+                else if (event.key === 'Escape') setPalette(null)
               }}
             />
             <div className="palette-list">
-              {quickFiles.map((file, index) => (
+              {paletteRows.map((file, index) => (
                 <button
-                  key={file.path}
+                  key={file}
                   type="button"
-                  className={index === quickIndex ? 'hit on' : 'hit'}
-                  onMouseEnter={() => setQuickIndex(index)}
-                  onClick={() => openFile(file.path)}
+                  className={index === paletteIndex ? 'hit on' : 'hit'}
+                  onMouseEnter={() => setPaletteIndex(index)}
+                  onClick={() => openFile(file)}
                 >
-                  <FileIcon name={file.name} />
-                  <span>{file.path}</span>
+                  <FileIcon name={file} />
+                  <span>{file}</span>
                 </button>
               ))}
             </div>
