@@ -56,6 +56,7 @@ test('html preview marks headings and mermaid blocks', () => {
   })
   assert.match(html, /id="h-0"/)
   assert.match(html, /class="mermaid"/)
+  assert.match(html, /data-open/)
   assert.match(html, /Start/)
   assert.match(html, /&lt;/)
   assert.doesNotMatch(html, /<script/i)

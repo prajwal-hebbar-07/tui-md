@@ -156,7 +156,7 @@ The desktop window keeps the files on the left and the outline under them. Each 
 
 ## Diagrams
 
-The desktop app renders every diagram Mermaid supports. The terminal lays out flowcharts, sequence, class, state, ER, pie, gantt, journey, mindmap, timeline, git, xy, and quadrant diagrams. Other types keep their source and a note to open the desktop app.
+The desktop app renders every diagram Mermaid supports. The ↗ control on a diagram opens it in its own window: drag or scroll to move, and pinch or Ctrl/Cmd-scroll to zoom. The terminal lays out flowcharts, sequence, class, state, ER, pie, gantt, journey, mindmap, timeline, git, xy, and quadrant diagrams. Other types keep their source and a note to open the desktop app.
 
 ## License
 

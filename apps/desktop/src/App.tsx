@@ -201,6 +201,7 @@ export function App() {
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      if (document.querySelector('.board')) return
       const target = event.target
       const typing = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement
       const mod = event.metaKey || event.ctrlKey

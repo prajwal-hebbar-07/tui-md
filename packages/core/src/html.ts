@@ -37,12 +37,14 @@ md.renderer.rules.image = (tokens, idx, _options, env) => {
   return `<img src="${esc(href)}" alt="${esc(alt)}" />`
 }
 
+function diagramBlock(source: string): string {
+  return `<div class="diagram"><div class="diagram-bar"><button type="button" data-open aria-label="Open in a new window" title="Open in a new window">↗</button><button type="button" data-zoom="in" aria-label="Zoom in">+</button><button type="button" data-zoom="out" aria-label="Zoom out">−</button><button type="button" data-zoom="reset" aria-label="Reset zoom">↺</button></div><div class="diagram-canvas"><pre class="mermaid">${esc(source)}</pre></div></div>`
+}
+
 md.renderer.rules.fence = (tokens, idx) => {
   const token = tokens[idx]
   const lang = token.info.trim().split(/\s+/)[0] || ''
-  if (lang === 'mermaid') {
-    return `<div class="diagram"><div class="diagram-bar"><button type="button" data-zoom="in" aria-label="Zoom in">+</button><button type="button" data-zoom="out" aria-label="Zoom out">−</button><button type="button" data-zoom="reset" aria-label="Reset zoom">↺</button></div><div class="diagram-canvas"><pre class="mermaid">${esc(token.content)}</pre></div></div>`
-  }
+  if (lang === 'mermaid') return diagramBlock(token.content)
   const cls = lang ? ` class="language-${esc(lang)}"` : ''
   return `<pre class="hljs"><code${cls}>${esc(token.content)}</code></pre>`
 }
@@ -56,5 +58,5 @@ export function renderMarkdownHtml(src: string, options: HtmlOptions = {}): stri
 }
 
 export function mermaidDocument(src: string): string {
-  return `<div class="markdown-body"><div class="diagram"><div class="diagram-bar"><button type="button" data-zoom="in" aria-label="Zoom in">+</button><button type="button" data-zoom="out" aria-label="Zoom out">−</button><button type="button" data-zoom="reset" aria-label="Reset zoom">↺</button></div><div class="diagram-canvas"><pre class="mermaid">${esc(src)}</pre></div></div></div>`
+  return `<div class="markdown-body">${diagramBlock(src)}</div>`
 }

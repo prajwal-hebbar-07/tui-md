@@ -262,9 +262,58 @@ button { background: none; border: 0; padding: 0; }
   border-radius: 3px;
   color: #ccc;
 }
+.diagram-bar button { cursor: pointer; }
 .diagram-bar button:hover { background: #37373d; }
 .diagram-canvas { display: flex; justify-content: center; }
 .diagram-canvas svg { max-width: 100%; height: auto; }
+.board {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: #141414;
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.board.grabbing { cursor: grabbing; }
+.board-layer { transform-origin: 0 0; width: max-content; visibility: hidden; }
+.board-layer svg { display: block; max-width: none; }
+.board-bar {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  gap: 4px;
+  cursor: default;
+}
+.board-bar button {
+  height: 26px;
+  min-width: 26px;
+  padding: 0 8px;
+  background: #2a2a2a;
+  border: 1px solid #3c3c3c;
+  border-radius: 4px;
+  color: #ccc;
+  cursor: pointer;
+}
+.board-bar button:hover { background: #37373d; }
+.board-hint {
+  position: absolute;
+  left: 14px;
+  bottom: 12px;
+  color: #6e6e6e;
+  font-size: 12px;
+  pointer-events: none;
+}
+.board-error {
+  position: absolute;
+  left: 24px;
+  right: 24px;
+  top: 56px;
+  color: #f14c4c;
+  white-space: pre-wrap;
+}
 
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb { background: #424242; border-radius: 8px; }

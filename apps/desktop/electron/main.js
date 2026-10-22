@@ -29,6 +29,7 @@ function findStartRoot() {
 
 let root = findStartRoot()
 const treeOptions = { keepEmpty: true }
+const diagrams = new Map()
 
 function webPreferences() {
   return {
@@ -53,6 +54,24 @@ function attach(win) {
     if (!params.selectionText) return
     Menu.buildFromTemplate([{ role: 'copy' }, { role: 'selectAll' }]).popup()
   })
+}
+
+function openDiagramWindow(source) {
+  const id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
+  diagrams.set(id, String(source || ''))
+  const win = new BrowserWindow({
+    width: 1100,
+    height: 760,
+    minWidth: 480,
+    minHeight: 320,
+    backgroundColor: '#141414',
+    title: 'Diagram',
+    webPreferences: webPreferences(),
+  })
+  attach(win)
+  win.on('closed', () => diagrams.delete(id))
+  if (dev) void win.loadURL(`http://127.0.0.1:5173/?diagram=${encodeURIComponent(id)}`)
+  else void win.loadFile(path.join(__dirname, '../dist/index.html'), { query: { diagram: id } })
 }
 
 function installMenu() {
@@ -115,6 +134,10 @@ app.whenReady().then(() => {
   ipcMain.handle('remove', (_event, rel) =>
     root ? removeEntry(root, String(rel || '')) : { ok: false, error: 'No folder open' },
   )
+  ipcMain.handle('open-diagram', (_event, source) => {
+    openDiagramWindow(source)
+  })
+  ipcMain.handle('diagram-source', (_event, id) => diagrams.get(String(id || '')) ?? '')
   ipcMain.handle('open-folder', async () => {
     const parent = BrowserWindow.getFocusedWindow() ?? undefined
     const result = await dialog.showOpenDialog(parent, { properties: ['openDirectory'] })

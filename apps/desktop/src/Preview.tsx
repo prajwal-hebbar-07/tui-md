@@ -11,8 +11,10 @@ import typescript from 'highlight.js/lib/languages/typescript'
 import xml from 'highlight.js/lib/languages/xml'
 import yaml from 'highlight.js/lib/languages/yaml'
 import mermaid from 'mermaid'
-import { useEffect, useRef, type MouseEvent } from 'react'
+import { useEffect, useRef, useState, type MouseEvent } from 'react'
 import { assetUrl } from './api'
+import { DiagramBoard } from './DiagramBoard'
+import { ensureMermaid } from './mermaid'
 
 hljs.registerLanguage('bash', bash)
 hljs.registerLanguage('sh', bash)
@@ -33,45 +35,6 @@ hljs.registerLanguage('html', xml)
 hljs.registerLanguage('yaml', yaml)
 hljs.registerLanguage('yml', yaml)
 
-let mermaidReady = false
-
-function ensureMermaid() {
-  if (mermaidReady) return
-  mermaidReady = true
-  mermaid.initialize({
-    startOnLoad: false,
-    securityLevel: 'antiscript',
-    theme: 'base',
-    look: 'classic',
-    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-    flowchart: { curve: 'basis', htmlLabels: true, padding: 14 },
-    themeVariables: {
-      darkMode: true,
-      background: 'transparent',
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-      fontSize: '15px',
-      primaryColor: '#1e1e1e',
-      primaryTextColor: '#d4d4d4',
-      primaryBorderColor: '#9a9a9a',
-      secondaryColor: '#1e1e1e',
-      secondaryTextColor: '#d4d4d4',
-      secondaryBorderColor: '#9a9a9a',
-      tertiaryColor: '#252526',
-      tertiaryTextColor: '#d4d4d4',
-      tertiaryBorderColor: '#9a9a9a',
-      lineColor: '#b5b5b5',
-      textColor: '#d4d4d4',
-      mainBkg: '#1e1e1e',
-      nodeBorder: '#9a9a9a',
-      clusterBkg: '#252526',
-      clusterBorder: '#9a9a9a',
-      titleColor: '#e7e7e7',
-      edgeLabelBackground: '#1e1e1e',
-      nodeTextColor: '#d4d4d4',
-    },
-  })
-}
-
 export function Preview({
   file,
   body,
@@ -84,6 +47,7 @@ export function Preview({
   kind: 'markdown' | 'mermaid' | 'text' | 'binary'
 }) {
   const ref = useRef<HTMLDivElement>(null)
+  const [board, setBoard] = useState<string | null>(null)
   const html =
     body && body.ok && !body.binary && mode === 'preview'
       ? kind === 'mermaid'
@@ -108,6 +72,10 @@ export function Preview({
       hljs.highlightElement(el)
     })
     const nodes = [...root.querySelectorAll<HTMLElement>('pre.mermaid')]
+    for (const node of nodes) {
+      const diagram = node.closest<HTMLElement>('.diagram')
+      if (diagram) diagram.dataset.source = node.textContent || ''
+    }
     if (!nodes.length) return
     ensureMermaid()
     ;(async () => {
@@ -128,7 +96,26 @@ export function Preview({
     }
   }, [html])
 
+  async function openDiagram(source: string) {
+    try {
+      if (window.tuiMd?.openDiagram) {
+        await window.tuiMd.openDiagram(source)
+        return
+      }
+    } catch {
+      // Browser preview has no desktop bridge.
+    }
+    setBoard(source)
+  }
+
   const onClick = (event: MouseEvent) => {
+    const opener = (event.target as HTMLElement).closest('button[data-open]')
+    if (opener) {
+      const diagram = opener.closest<HTMLElement>('.diagram')
+      const source = diagram?.dataset.source || diagram?.querySelector('pre.mermaid')?.textContent || ''
+      void openDiagram(source)
+      return
+    }
     const button = (event.target as HTMLElement).closest('button[data-zoom]')
     if (!button) return
     const canvas = button.closest('.diagram')?.querySelector<HTMLElement>('.diagram-canvas')
@@ -158,6 +145,9 @@ export function Preview({
     )
   }
   return (
-    <div className="preview" ref={ref} onClick={onClick} dangerouslySetInnerHTML={{ __html: html }} />
+    <>
+      <div className="preview" ref={ref} onClick={onClick} dangerouslySetInnerHTML={{ __html: html }} />
+      {board != null ? <DiagramBoard source={board} onClose={() => setBoard(null)} /> : null}
+    </>
   )
 }

@@ -10,4 +10,6 @@ contextBridge.exposeInMainWorld('tuiMd', {
   create: (rel, kind) => ipcRenderer.invoke('create', rel, kind),
   rename: (from, to) => ipcRenderer.invoke('rename', from, to),
   remove: (rel) => ipcRenderer.invoke('remove', rel),
+  openDiagram: (source) => ipcRenderer.invoke('open-diagram', source),
+  diagramSource: (id) => ipcRenderer.invoke('diagram-source', id),
 })
