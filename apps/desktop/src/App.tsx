@@ -106,6 +106,7 @@ export function App() {
   const [rootOpen, setRootOpen] = useState(true)
   const [tabs, setTabs] = useState<string[]>([])
   const [active, setActive] = useState<string | null>(null)
+  const [selected, setSelected] = useState<{ path: string; kind: 'file' | 'dir' } | null>(null)
   const [bodies, setBodies] = useState<Record<string, ReadResult>>({})
   const [mode, setMode] = useState<'preview' | 'source'>('preview')
   const [outlineOpen, setOutlineOpen] = useState(true)
@@ -144,6 +145,7 @@ export function App() {
       if (first) {
         setTabs([first])
         setActive(first)
+        setSelected({ path: first, kind: 'file' })
         if (info?.path) remember(info.path, first)
       }
     })().catch((error: unknown) => {
@@ -194,6 +196,7 @@ export function App() {
   const crumb = active ? active.split('/') : []
   const eol = body && body.ok && body.eol === 'CRLF' ? 'CRLF' : 'LF'
   const language = kind === 'markdown' ? 'Markdown' : kind === 'mermaid' ? 'Mermaid' : active?.split('.').pop() || 'Text'
+  const newDir = selected ? (selected.kind === 'dir' ? selected.path : parentDir(selected.path)) : active ? parentDir(active) : ''
 
   useEffect(() => {
     document.title = active ? `${fileName} — ${rootName}` : rootName
@@ -218,6 +221,16 @@ export function App() {
         return
       }
       if (typing) return
+      if (selected?.path && event.key === 'F2') {
+        event.preventDefault()
+        startDraft({ mode: 'rename', path: selected.path, kind: selected.kind }, selected.path.split('/').pop() || '')
+        return
+      }
+      if (selected?.path && (event.key === 'Delete' || (platform === 'darwin' && event.metaKey && event.key === 'Backspace'))) {
+        event.preventDefault()
+        void destroy(selected.path, selected.kind)
+        return
+      }
       if (event.key === 'Escape') {
         setPalette(null)
         setFindOpen(false)
@@ -225,6 +238,7 @@ export function App() {
       }
       if (event.key === 't') setOutlineOpen((value) => !value)
       else if (event.key === 'H') {
+        event.preventDefault()
         setPalette('history')
         setPaletteQuery('')
         setPaletteIndex(0)
@@ -265,7 +279,7 @@ export function App() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [currentHeading, desktop, findText, kind, outline])
+  }, [active, currentHeading, desktop, findText, kind, outline, platform, selected, tabs])
 
   function trackHeading() {
     const root = viewport.current
@@ -287,6 +301,7 @@ export function App() {
   function openFile(rel: string) {
     setTabs((current) => (current.includes(rel) ? current : [...current, rel]))
     setActive(rel)
+    setSelected({ path: rel, kind: 'file' })
     setExpanded((current) => {
       const next = new Set(current)
       for (const dir of ancestorDirs(rel)) next.add(dir)
@@ -324,6 +339,7 @@ export function App() {
     const map = (item: string) => (item === from || item.startsWith(`${from}/`) ? `${to}${item.slice(from.length)}` : item)
     setTabs((current) => current.map(map))
     setActive((current) => (current ? map(current) : current))
+    setSelected((current) => (current ? { ...current, path: map(current.path) } : current))
     setBodies((current) => {
       const next: Record<string, ReadResult> = {}
       for (const [key, value] of Object.entries(current)) next[map(key)] = value
@@ -397,6 +413,7 @@ export function App() {
       setActive(next[index] ?? next[index - 1] ?? null)
     }
     setTabs(next)
+    setSelected((current) => (current && (current.path === rel || current.path.startsWith(`${rel}/`)) ? null : current))
     refreshTree()
   }
 
@@ -408,6 +425,7 @@ export function App() {
     setRootPath(next.path)
     setTabs([])
     setActive(null)
+    setSelected(null)
     setBodies({})
     setExpanded(new Set())
     setDraft(null)
@@ -441,33 +459,10 @@ export function App() {
       <header className="titlebar">
         <span className="title">{active ? `${fileName} — ${rootName}` : rootName}</span>
         <div className="title-actions">
-          <button
-            type="button"
-            onClick={() => {
-              setPalette('history')
-              setPaletteQuery('')
-              setPaletteIndex(0)
-            }}
-          >
-            Recent
-          </button>
-          <button type="button" className={outlineOpen ? 'on' : ''} onClick={() => setOutlineOpen((value) => !value)}>
-            Outline
-          </button>
           {desktop ? (
             <button type="button" onClick={() => void chooseFolder()}>
               Open Folder
             </button>
-          ) : null}
-          {kind === 'markdown' ? (
-            <div className="mode">
-              <button type="button" className={mode === 'preview' ? 'on' : ''} onClick={() => setMode('preview')}>
-                Preview
-              </button>
-              <button type="button" className={mode === 'source' ? 'on' : ''} onClick={() => setMode('source')}>
-                Source
-              </button>
-            </div>
           ) : null}
         </div>
       </header>
@@ -476,10 +471,10 @@ export function App() {
           <div className="side-title">
             <span>Explorer</span>
             <span className="side-actions">
-              <button type="button" onClick={() => startDraft({ mode: 'file', dir: active ? parentDir(active) : '' })}>
+              <button type="button" onClick={() => startDraft({ mode: 'file', dir: newDir })}>
                 New File
               </button>
-              <button type="button" onClick={() => startDraft({ mode: 'dir', dir: active ? parentDir(active) : '' })}>
+              <button type="button" onClick={() => startDraft({ mode: 'dir', dir: newDir })}>
                 New Folder
               </button>
             </span>
@@ -510,9 +505,12 @@ export function App() {
           <div className="side-scroll">
             {hasRoot ? (
               <div
-                className="tree-row root-row"
+                className={selected?.path === '' ? 'tree-row root-row active' : 'tree-row root-row'}
                 style={{ paddingLeft: 8 }}
-                onClick={() => setRootOpen((value) => !value)}
+                onClick={() => {
+                  setSelected({ path: '', kind: 'dir' })
+                  setRootOpen((value) => !value)
+                }}
                 onContextMenu={(event) => {
                   event.preventDefault()
                   setMenu({ x: event.clientX, y: event.clientY, path: '', kind: 'root' })
@@ -530,16 +528,17 @@ export function App() {
                 nodes={tree.nodes}
                 depth={1}
                 expanded={expanded}
-                selected={active || ''}
+                selected={selected?.path ?? ''}
                 git={git}
-                onToggle={(rel) =>
+                onToggle={(rel) => {
+                  setSelected({ path: rel, kind: 'dir' })
                   setExpanded((current) => {
                     const next = new Set(current)
                     if (next.has(rel)) next.delete(rel)
                     else next.add(rel)
                     return next
                   })
-                }
+                }}
                 onOpen={openFile}
                 onMenu={(node, x, y) => setMenu({ x, y, path: node.path, kind: node.kind })}
               />
